@@ -274,7 +274,11 @@
         }
 
         loadOpenCC().then(openCC => {
-            if (isCurrentCard()) renderExpressionVariants(lapis, openCC);
+            if (!isCurrentCard()) return;
+            renderExpressionVariants(lapis, openCC);
+            // The initial tone-coloring pass ran before OpenCC was available, so
+            // a bold word written in the other script may still be uncolored.
+            applyToneColors(openCC);
         }).catch(() => {
             // Loading already logged the failure. Leave the variant container hidden.
         });
@@ -319,12 +323,24 @@
         yu yue yuan yun yo m n ng
     `.trim().split(/\s+/u));
 
+    // Separable-verb markers such as shēng ∥ huǒ, shēng ‖ huǒ, shēng | huǒ, or
+    // the CC-CEDICT style sheng1//huo3 annotate the word; they are not part of
+    // the reading, so treat them as whitespace before validating the rest.
+    var SEPARABLE_VERB_MARKERS = /(?:\/\/|[∥‖|｜∕⫽])+/gu;
+
+    // Dictionaries such as 现代汉语词典 prefix a neutral-tone syllable with a
+    // middle dot (jù·zi). The dot is normalized to U+00B7 and kept attached to
+    // the syllable it precedes so parsePinyinSyllable can read it as neutral.
+    var NEUTRAL_TONE_DOT = "·";
+    var NEUTRAL_TONE_DOTS = /\s*[·‧・]+\s*/gu;
+
     function splitPinyinChunks(reading) {
-        const trimmed = reading.trim();
+        const trimmed = reading.replace(SEPARABLE_VERB_MARKERS, " ").trim();
         if (!trimmed || /[\/;,，；、]/u.test(trimmed)) return null;
 
         const chunks = trimmed
             .replace(/[\u0027\u02BC\u2018\u2019\-\u2010-\u2015]+/gu, " ")
+            .replace(NEUTRAL_TONE_DOTS, ` ${NEUTRAL_TONE_DOT}`)
             .split(/\s+/u)
             .filter(Boolean);
         return chunks.length > 0 ? chunks : null;
@@ -338,7 +354,7 @@
         for (const chunk of chunks) {
             // A trailing tone digit provides an unambiguous boundary, so this
             // also accepts compact numbered Pinyin such as "ni3hao3".
-            const matches = chunk.match(/[\p{Letter}\p{Mark}:]+[0-5]?/gu) || [];
+            const matches = chunk.match(/·?[\p{Letter}\p{Mark}:]+[0-5]?/gu) || [];
             if (matches.length === 0 || matches.join("") !== chunk) return null;
             syllables.push(...matches);
         }
@@ -347,11 +363,15 @@
     }
 
     function parsePinyinSyllable(syllable) {
-        const numericMatch = syllable.match(/[0-5]$/u);
+        // A leading middle dot marks a neutral tone (·zi). An explicit tone
+        // mark or digit on the same syllable still wins (·xī stays tone 1).
+        const neutralDotted = syllable.startsWith(NEUTRAL_TONE_DOT);
+        const undotted = neutralDotted ? syllable.slice(NEUTRAL_TONE_DOT.length) : syllable;
+        const numericMatch = undotted.match(/[0-5]$/u);
         const numericTone = numericMatch
             ? (numericMatch[0] === "0" || numericMatch[0] === "5" ? 5 : Number(numericMatch[0]))
             : null;
-        const letters = numericMatch ? syllable.slice(0, -1) : syllable;
+        const letters = numericMatch ? undotted.slice(0, -1) : undotted;
         const normalized = letters
             .toLowerCase()
             .replace(/u:/gu, "ü")
@@ -370,7 +390,7 @@
             .replace(/ü/gu, "v");
         if (!/^[a-zv]+$/u.test(base)) return null;
 
-        const tone = numericTone ?? markedTone;
+        const tone = numericTone ?? markedTone ?? (neutralDotted ? 5 : null);
         return {tone, explicit: tone !== null, base};
     }
 
@@ -622,6 +642,23 @@
         return true;
     }
 
+    // The sentence may bold the expression in the other script (for example a
+    // traditional 舉家 for a simplified 举家 expression). Accept every script
+    // form OpenCC can produce so those words still receive tone colors.
+    function expressionForms(expressionHan, openCC = availableOpenCC()) {
+        const forms = new Set([expressionHan]);
+        if (!openCC) return forms;
+
+        try {
+            const {toTraditional, toSimplified} = expressionVariantConverters(openCC);
+            forms.add(hanText(toTraditional(expressionHan)));
+            forms.add(hanText(toSimplified(expressionHan)));
+        } catch (error) {
+            console.warn("Lapis Chinese could not convert the expression for tone matching.", error);
+        }
+        return forms;
+    }
+
     function applyReadingToneColors(element, syllables) {
         if (element.dataset.toneColored === "true") return false;
         const showText = document.defaultView?.NodeFilter?.SHOW_TEXT ?? 4;
@@ -659,7 +696,7 @@
         return true;
     }
 
-    function applyToneColors() {
+    function applyToneColors(openCC = availableOpenCC()) {
         const vocab = document.querySelector(".vocab");
         const reading = document.querySelector(".reading");
         if (!vocab || !reading) return false;
@@ -669,10 +706,11 @@
         if (!syllables) return false;
         const tones = syllables.map(syllable => syllable.tone);
 
+        const forms = expressionForms(expressionHan, openCC);
         let applied = applyToneSequence(vocab, tones);
         applied = applyReadingToneColors(reading, syllables) || applied;
         for (const target of document.querySelectorAll(".sentence b, .sentence-alt b")) {
-            if (hanText(target.textContent) !== expressionHan) continue;
+            if (!forms.has(hanText(target.textContent))) continue;
             applied = applyToneSequence(target, tones) || applied;
         }
         return applied;

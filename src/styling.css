@@ -9,10 +9,10 @@
 
   /* PC Font sizes */
   --pc-main-font-size: 16px;
-  --pc-main-def-size: 20px;
+  --pc-main-def-size: 25px;
   --pc-vocab-font-size: 85px;
   --pc-back-vocab-font-size: 60px;
-  --pc-back-variant-font-size: 26px;
+  --pc-back-variant-font-size: 50px;
   --pc-sentence-font-size: 52px;
   --pc-back-sentence-font-size: 35px;
   --pc-hint-font-size: 38px;
@@ -20,14 +20,14 @@
 
   /* Mobile font sizes */
   --mobile-main-font-size: 16px;
-  --mobile-main-def-size: 16px;
+  --mobile-main-def-size: 25px;
   --mobile-vocab-font-size: 70px;
-  --mobile-back-vocab-font-size: 32px;
-  --mobile-back-variant-font-size: 18px;
+  --mobile-back-vocab-font-size: 50px;
+  --mobile-back-variant-font-size: 45px;
   --mobile-sentence-font-size: 38px;
-  --mobile-back-sentence-font-size: 24px;
+  --mobile-back-sentence-font-size: 35px;
   --mobile-hint-font-size: 24px;
-  --mobile-info-font-size: 16px;
+  --mobile-info-font-size: 25px;
 
   /* Miscellaneous */
   --font-serif: "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", SimSun, serif;
@@ -43,7 +43,7 @@
   /* For an overview of these variables
   See docs/user_settings.md */
   --main-picture-position: "right"; /* "right", "left", "alt" */
-  --sentence-position: "above"; /* "above", "below" the definition box*/
+  --sentence-position: "below"; /* "above", "below" the definition box*/
   --audio-buttons: "header"; /* "header", "fixed", "alt" */
   --nsfw-blur-contained: "off"; /* "on", "off" */
   --open-misc-info: "off"; /* "on", "off" */
