@@ -3,7 +3,7 @@
 Lapis Chinese is a Mandarin adaptation of the
 [Lapis](https://github.com/donkuri/lapis) Anki note type. It brings the familiar
 Lapis card design and features to Chinese vocabulary and sentence cards, with
-support for Pinyin and Simplified and Traditional characters.
+support for Pinyin, Zhuyin, and Simplified and Traditional characters.
 
 ## Install the APKG
 
@@ -72,8 +72,9 @@ npm run test:all-js
 python -m unittest discover -s tests -p "test_*.py"
 ```
 
-The suite covers diacritic and numbered Pinyin, compact numeric readings, neutral
-tones, umlaut spellings, mismatch and ambiguity handling, Simplified/Traditional
+The suite covers diacritic and numbered Pinyin, spaced and compact Zhuyin,
+pronunciation coloring with preserved markup, neutral tones, umlaut spellings,
+mismatch and ambiguity handling, Simplified/Traditional
 conversion and persistent rendering, graceful converter failure, safe template
 data handling, Click-card listener cleanup, release ordering, stable Anki model
 metadata, and packaged OpenCC media.
@@ -83,6 +84,17 @@ metadata, and packaged OpenCC media.
 Font sizes, fonts, light/dark tone colors, images, and layout options are CSS
 variables at the top of `src/styling.css`. The behavioral layout variables are
 documented in [`docs/user_settings.md`](docs/user_settings.md).
+
+Tone coloring automatically recognizes Pinyin or Mandarin Zhuyin in
+`ExpressionReading`. It colors the vocabulary heading, pronunciation syllables
+(including tone marks or numbers), and matching bold vocabulary in the sentence.
+The smaller Simplified/Traditional variant rows keep their subdued styling.
+Spaced and uniquely segmentable compact readings are supported. An unmarked
+Zhuyin syllable is first tone; a neutral tone uses `˙` before the syllable, or after
+it when attachment is unambiguous. Use spaces if a dot could belong to either
+neighboring syllable, such as `ㄇㄚ ˙ㄇㄚ` for 媽媽. Invalid, ambiguous, mixed-script,
+or mismatched readings remain uncolored. Numeric Zhuyin tone notation and
+non-Mandarin Bopomofo extensions are not supported.
 
 ## License and attribution
 

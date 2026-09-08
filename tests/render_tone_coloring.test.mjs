@@ -35,6 +35,8 @@ async function renderCard(page, nightMode) {
         classes: Array.from(document.querySelectorAll(".vocab [class^='tone-']"))
             .map(element => element.className),
         readingToneSpans: document.querySelectorAll(".reading [class^='tone-']").length,
+        readingColors: Array.from(document.querySelectorAll(".reading [class^='tone-']"))
+            .map(element => getComputedStyle(element).color),
         sentenceToneSpans: document.querySelectorAll(".sentence [class^='tone-']").length,
         sentenceColors: Array.from(document.querySelectorAll(".sentence b:not(.unrelated) [class^='tone-']"))
             .map(element => getComputedStyle(element).color),
@@ -88,6 +90,8 @@ async function renderPersistentCard(page, expression, reading) {
             .map(element => getComputedStyle(element).color),
         sentenceClasses: Array.from(document.querySelectorAll(".sentence b [class^='tone-']"))
             .map(element => element.className),
+        readingClasses: Array.from(document.querySelectorAll(".reading [class^='tone-']"))
+            .map(element => element.className),
     }));
 }
 
@@ -117,7 +121,8 @@ test("renders compact-diacritic header and matching sentence tones in light and 
         assert.equal(light.applied, true);
         assert.deepEqual(light.classes, ["tone-2", "tone-4"]);
         assert.deepEqual(light.colors, ["rgb(2, 179, 28)", "rgb(137, 0, 191)"]);
-        assert.equal(light.readingToneSpans, 0);
+        assert.equal(light.readingToneSpans, 2);
+        assert.deepEqual(light.readingColors, light.colors);
         assert.equal(light.sentenceToneSpans, 2);
         assert.deepEqual(light.sentenceColors, ["rgb(2, 179, 28)", "rgb(137, 0, 191)"]);
         assert.equal(light.alternateSentenceToneSpans, 2);
@@ -130,7 +135,8 @@ test("renders compact-diacritic header and matching sentence tones in light and 
         assert.equal(dark.applied, true);
         assert.deepEqual(dark.classes, ["tone-2", "tone-4"]);
         assert.deepEqual(dark.colors, ["rgb(74, 222, 128)", "rgb(192, 132, 252)"]);
-        assert.equal(dark.readingToneSpans, 0);
+        assert.equal(dark.readingToneSpans, 2);
+        assert.deepEqual(dark.readingColors, dark.colors);
         assert.equal(dark.sentenceToneSpans, 2);
         assert.deepEqual(dark.sentenceColors, ["rgb(74, 222, 128)", "rgb(192, 132, 252)"]);
         assert.equal(dark.alternateSentenceToneSpans, 2);
@@ -175,6 +181,20 @@ test("recolors cards after forward and backward navigation in a persistent previ
         assert.deepEqual(first.vocabClasses, ["tone-2", "tone-4"]);
         assert.deepEqual(first.vocabColors, ["rgb(74, 222, 128)", "rgb(192, 132, 252)"]);
         assert.deepEqual(first.sentenceClasses, ["tone-2", "tone-4"]);
+        assert.deepEqual(first.readingClasses, ["tone-2", "tone-4"]);
+
+        const zhuyin = await renderPersistentCard(page, "水母亞門", "ㄕㄨㄟˇㄇㄨˇㄧㄚˋㄇㄣˊ");
+        assert.deepEqual(zhuyin.vocabClasses, ["tone-3", "tone-3", "tone-4", "tone-2"]);
+        assert.deepEqual(zhuyin.readingClasses, zhuyin.vocabClasses);
+        assert.deepEqual(zhuyin.sentenceClasses, zhuyin.vocabClasses);
+
+        const invalid = await renderPersistentCard(page, "媽媽", "ㄇㄚ˙ㄇㄚ");
+        assert.deepEqual(invalid.vocabClasses, []);
+        assert.deepEqual(invalid.readingClasses, []);
+        assert.deepEqual(invalid.sentenceClasses, []);
+
+        const backToZhuyin = await renderPersistentCard(page, "水母亞門", "ㄕㄨㄟˇㄇㄨˇㄧㄚˋㄇㄣˊ");
+        assert.deepEqual(backToZhuyin, zhuyin);
 
         const next = await renderPersistentCard(page, "牢牢", "láoláo");
         assert.deepEqual(next.vocabClasses, ["tone-2", "tone-2"]);
@@ -191,6 +211,110 @@ test("recolors cards after forward and backward navigation in a persistent previ
         assert.deepEqual(previous.vocabColors, ["rgb(74, 222, 128)", "rgb(192, 132, 252)"]);
         assert.deepEqual(previous.sentenceClasses, ["tone-2", "tone-4"]);
         assert.deepEqual(pageErrors, []);
+    } finally {
+        await browser.close();
+    }
+});
+
+test("colors pronunciation text across markup without changing characters, separators, or repeated renders", async () => {
+    const browser = await launchBrowser();
+    try {
+        const page = await browser.newPage();
+        const cases = [
+            {
+                expression: "水母亞門",
+                html: "ㄕㄨㄟˇㄇㄨˇㄧㄚˋㄇㄣˊ",
+                tones: [3, 3, 4, 2],
+                spans: [["ㄕㄨㄟˇ", 3], ["ㄇㄨˇ", 3], ["ㄧㄚˋ", 4], ["ㄇㄣˊ", 2]],
+            },
+            {
+                expression: "水母亞門",
+                html: "  <em>ㄕㄨ</em>ㄟˇ&nbsp;ㄇㄨˇ—ㄧㄚˋ’ㄇㄣˊ  ",
+                tones: [3, 3, 4, 2],
+                spans: [["ㄕㄨ", 3], ["ㄟˇ", 3], ["ㄇㄨˇ", 3], ["ㄧㄚˋ", 4], ["ㄇㄣˊ", 2]],
+            },
+            {
+                expression: "媽麻馬罵嗎",
+                html: "ㄇㄚˉ ㄇㄚˊ ㄇㄚˇ ㄇㄚˋ ˙<em>ㄇㄚ</em>",
+                tones: [1, 2, 3, 4, 5],
+                spans: [["ㄇㄚˉ", 1], ["ㄇㄚˊ", 2], ["ㄇㄚˇ", 3], ["ㄇㄚˋ", 4], ["˙", 5], ["ㄇㄚ", 5]],
+            },
+            {
+                expression: "天空",
+                html: "ㄊㄧㄢㄎㄨㄥ",
+                tones: [1, 1],
+                spans: [["ㄊㄧㄢ", 1], ["ㄎㄨㄥ", 1]],
+            },
+            {
+                expression: "女兒",
+                html: "  <em>nu</em>\u0308\u030c’e\u0301r  ",
+                tones: [3, 2],
+                spans: [["nu", 3], ["\u0308\u030c", 3], ["e\u0301r", 2]],
+            },
+            {
+                expression: "朋友",
+                html: "peng2<em>you</em>5",
+                tones: [2, 5],
+                spans: [["peng2", 2], ["you", 5], ["5", 5]],
+            },
+            {
+                expression: "媽媽",
+                html: "ㄇㄚ˙ㄇㄚ",
+                tones: [],
+                spans: [],
+            },
+        ];
+        for (const nightMode of [false, true]) {
+            for (const fixture of cases) {
+                await page.setContent(`<style>${css}</style>
+                    <div class="card ${nightMode ? "nightMode" : ""}"><div id="lapis">
+                        <div class="vocab"><em>${fixture.expression}</em>！</div>
+                        <div class="reading">${fixture.html}</div>
+                        <div class="sentence"><b>${fixture.expression}</b><b class="unrelated">其他</b></div>
+                        <div class="sentence-alt"><b>${fixture.expression}</b></div>
+                    </div></div>`);
+                const result = await page.evaluate(source => {
+                    const reading = document.querySelector(".reading");
+                    const original = reading.textContent;
+                    const em = reading.querySelector("em");
+                    const emText = em?.textContent;
+                    const applied = eval(`${source}\napplyToneColors();`);
+                    const htmlAfterFirst = document.getElementById("lapis").innerHTML;
+                    const repeated = eval(`${source}\napplyToneColors();`);
+                    const spans = selector => Array.from(document.querySelectorAll(`${selector} [class^='tone-']`));
+                    return {
+                        applied,
+                        repeated,
+                        originalPreserved: original === reading.textContent,
+                        markupPreserved: em === reading.querySelector("em") && emText === em?.textContent,
+                        idempotent: htmlAfterFirst === document.getElementById("lapis").innerHTML,
+                        reading: spans(".reading").map(span => [span.textContent, Number(span.className.slice(5))]),
+                        vocab: spans(".vocab").map(span => Number(span.className.slice(5))),
+                        sentence: spans(".sentence b:not(.unrelated)").map(span => span.className),
+                        alternate: spans(".sentence-alt b").map(span => span.className),
+                        unrelated: spans(".unrelated").length,
+                        sameColors: spans(".reading").every(span => {
+                            const han = document.querySelector(`.vocab .${span.className}`);
+                            return han && getComputedStyle(han).color === getComputedStyle(span).color;
+                        }),
+                        nestedToneSpans: document.querySelectorAll("[class^='tone-'] [class^='tone-']").length,
+                    };
+                }, toneSource);
+                const label = `${fixture.expression}: ${fixture.html}, night=${nightMode}`;
+                assert.equal(result.applied, fixture.tones.length > 0, label);
+                assert.equal(result.repeated, false, label);
+                assert.equal(result.originalPreserved, true, label);
+                assert.equal(result.markupPreserved, true, label);
+                assert.equal(result.idempotent, true, label);
+                assert.deepEqual(result.reading, fixture.spans, label);
+                assert.deepEqual(result.vocab, fixture.tones, label);
+                assert.deepEqual(result.sentence, fixture.tones.map(tone => `tone-${tone}`), label);
+                assert.deepEqual(result.alternate, result.sentence, label);
+                assert.equal(result.unrelated, 0, label);
+                assert.equal(result.sameColors, true, label);
+                assert.equal(result.nestedToneSpans, 0, label);
+            }
+        }
     } finally {
         await browser.close();
     }

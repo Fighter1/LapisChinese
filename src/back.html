@@ -26,7 +26,7 @@
                 <div class="vocab">{{Expression}}</div>
                 <div class="script-variants" aria-label="Chinese character variants" hidden></div>
 
-                <!-- Pinyin reading -->
+                <!-- Pinyin or Zhuyin reading -->
                 <div class="info">
                     <div class="reading">{{ExpressionReading}}</div>
                     <br />
@@ -446,17 +446,128 @@
         return solutions.length === 1 ? solutions[0] : null;
     }
 
-    function parsePinyinTones(reading, expectedSyllableCount = null) {
+    // Ranges use UTF-16 offsets into the untouched field text, like DOM text nodes.
+    // Normalization is only used for comparison, never to rewrite the reading.
+    function readingSyllableRanges(reading, syllables, tones) {
+        if (!syllables || !tones) return null;
+        const result = [];
+        let offset = 0;
+        for (let index = 0; index < syllables.length; index += 1) {
+            const separator = reading.slice(offset).match(/^[\s\u0027\u02BC\u2018\u2019\-\u2010-\u2015]+/u);
+            offset += separator?.[0].length ?? 0;
+            const start = offset;
+            const normalized = syllables[index].normalize("NFD");
+            let original = "";
+            while (offset < reading.length && original.normalize("NFD").length < normalized.length) {
+                const character = String.fromCodePoint(reading.codePointAt(offset));
+                original += character;
+                offset += character.length;
+            }
+            if (original.normalize("NFD") !== normalized) return null;
+            result.push({text: original, tone: tones[index], start, end: offset});
+        }
+        if (!/^[\s\u0027\u02BC\u2018\u2019\-\u2010-\u2015]*$/u.test(reading.slice(offset))) return null;
+        return result;
+    }
+
+    function parsePinyinReading(reading, expectedSyllableCount = null) {
         const directSyllables = splitPinyinSyllables(reading);
         const directTones = tonesForSyllables(directSyllables);
         if (directTones && (
             expectedSyllableCount === null || directTones.length === expectedSyllableCount
         )) {
-            return directTones;
+            return readingSyllableRanges(reading, directSyllables, directTones);
         }
 
         if (expectedSyllableCount === null) return null;
-        return tonesForSyllables(segmentCompactPinyin(reading, expectedSyllableCount));
+        const syllables = segmentCompactPinyin(reading, expectedSyllableCount);
+        return readingSyllableRanges(reading, syllables, tonesForSyllables(syllables));
+    }
+
+    function parsePinyinTones(reading, expectedSyllableCount = null) {
+        return parsePinyinReading(reading, expectedSyllableCount)?.map(syllable => syllable.tone) ?? null;
+    }
+
+    // Modern Mandarin combinations, including the standalone apical initials
+    // ㄓ ㄔ ㄕ ㄖ ㄗ ㄘ ㄙ. A dash represents an empty final.
+    var ZHUYIN_FINALS_BY_INITIAL = {
+        "": "ㄚ ㄛ ㄜ ㄝ ㄞ ㄟ ㄠ ㄡ ㄢ ㄣ ㄤ ㄥ ㄦ ㄧ ㄧㄚ ㄧㄛ ㄧㄝ ㄧㄞ ㄧㄠ ㄧㄡ ㄧㄢ ㄧㄣ ㄧㄤ ㄧㄥ ㄨ ㄨㄚ ㄨㄛ ㄨㄞ ㄨㄟ ㄨㄢ ㄨㄣ ㄨㄤ ㄨㄥ ㄩ ㄩㄝ ㄩㄢ ㄩㄣ ㄩㄥ",
+        "ㄅ": "ㄚ ㄛ ㄞ ㄟ ㄠ ㄢ ㄣ ㄤ ㄥ ㄧ ㄧㄝ ㄧㄠ ㄧㄢ ㄧㄣ ㄧㄥ ㄨ",
+        "ㄆ": "ㄚ ㄛ ㄞ ㄟ ㄠ ㄡ ㄢ ㄣ ㄤ ㄥ ㄧ ㄧㄝ ㄧㄠ ㄧㄢ ㄧㄣ ㄧㄥ ㄨ",
+        "ㄇ": "ㄚ ㄛ ㄜ ㄞ ㄟ ㄠ ㄡ ㄢ ㄣ ㄤ ㄥ ㄧ ㄧㄝ ㄧㄠ ㄧㄡ ㄧㄢ ㄧㄣ ㄧㄥ ㄨ",
+        "ㄈ": "ㄚ ㄛ ㄟ ㄡ ㄢ ㄣ ㄤ ㄥ ㄨ",
+        "ㄉ": "ㄚ ㄜ ㄞ ㄟ ㄠ ㄡ ㄢ ㄣ ㄤ ㄥ ㄧ ㄧㄚ ㄧㄝ ㄧㄠ ㄧㄡ ㄧㄢ ㄧㄥ ㄨ ㄨㄛ ㄨㄟ ㄨㄢ ㄨㄣ ㄨㄥ",
+        "ㄊ": "ㄚ ㄜ ㄞ ㄟ ㄠ ㄡ ㄢ ㄤ ㄥ ㄧ ㄧㄝ ㄧㄠ ㄧㄢ ㄧㄥ ㄨ ㄨㄛ ㄨㄟ ㄨㄢ ㄨㄣ ㄨㄥ",
+        "ㄋ": "ㄚ ㄜ ㄞ ㄟ ㄠ ㄡ ㄢ ㄣ ㄤ ㄥ ㄧ ㄧㄝ ㄧㄠ ㄧㄡ ㄧㄢ ㄧㄣ ㄧㄤ ㄧㄥ ㄨ ㄨㄛ ㄨㄢ ㄨㄥ ㄩ ㄩㄝ",
+        "ㄌ": "ㄚ ㄛ ㄜ ㄞ ㄟ ㄠ ㄡ ㄢ ㄤ ㄥ ㄧ ㄧㄚ ㄧㄝ ㄧㄠ ㄧㄡ ㄧㄢ ㄧㄣ ㄧㄤ ㄧㄥ ㄨ ㄨㄛ ㄨㄢ ㄨㄣ ㄨㄥ ㄩ ㄩㄝ",
+        "ㄍ": "ㄚ ㄜ ㄞ ㄟ ㄠ ㄡ ㄢ ㄣ ㄤ ㄥ ㄨ ㄨㄚ ㄨㄛ ㄨㄞ ㄨㄟ ㄨㄢ ㄨㄣ ㄨㄤ ㄨㄥ",
+        "ㄎ": "ㄚ ㄜ ㄞ ㄟ ㄠ ㄡ ㄢ ㄣ ㄤ ㄥ ㄨ ㄨㄚ ㄨㄛ ㄨㄞ ㄨㄟ ㄨㄢ ㄨㄣ ㄨㄤ ㄨㄥ",
+        "ㄏ": "ㄚ ㄜ ㄞ ㄟ ㄠ ㄡ ㄢ ㄣ ㄤ ㄥ ㄨ ㄨㄚ ㄨㄛ ㄨㄞ ㄨㄟ ㄨㄢ ㄨㄣ ㄨㄤ ㄨㄥ",
+        "ㄐ": "ㄧ ㄧㄚ ㄧㄝ ㄧㄠ ㄧㄡ ㄧㄢ ㄧㄣ ㄧㄤ ㄧㄥ ㄩ ㄩㄝ ㄩㄢ ㄩㄣ ㄩㄥ",
+        "ㄑ": "ㄧ ㄧㄚ ㄧㄝ ㄧㄠ ㄧㄡ ㄧㄢ ㄧㄣ ㄧㄤ ㄧㄥ ㄩ ㄩㄝ ㄩㄢ ㄩㄣ ㄩㄥ",
+        "ㄒ": "ㄧ ㄧㄚ ㄧㄝ ㄧㄠ ㄧㄡ ㄧㄢ ㄧㄣ ㄧㄤ ㄧㄥ ㄩ ㄩㄝ ㄩㄢ ㄩㄣ ㄩㄥ",
+        "ㄓ": "- ㄚ ㄜ ㄞ ㄟ ㄠ ㄡ ㄢ ㄣ ㄤ ㄥ ㄨ ㄨㄚ ㄨㄛ ㄨㄞ ㄨㄟ ㄨㄢ ㄨㄣ ㄨㄤ ㄨㄥ",
+        "ㄔ": "- ㄚ ㄜ ㄞ ㄠ ㄡ ㄢ ㄣ ㄤ ㄥ ㄨ ㄨㄚ ㄨㄛ ㄨㄞ ㄨㄟ ㄨㄢ ㄨㄣ ㄨㄤ ㄨㄥ",
+        "ㄕ": "- ㄚ ㄜ ㄞ ㄟ ㄠ ㄡ ㄢ ㄣ ㄤ ㄥ ㄨ ㄨㄚ ㄨㄛ ㄨㄞ ㄨㄟ ㄨㄢ ㄨㄣ ㄨㄤ",
+        "ㄖ": "- ㄜ ㄠ ㄡ ㄢ ㄣ ㄤ ㄥ ㄨ ㄨㄛ ㄨㄟ ㄨㄢ ㄨㄣ ㄨㄥ",
+        "ㄗ": "- ㄚ ㄜ ㄞ ㄟ ㄠ ㄡ ㄢ ㄣ ㄤ ㄥ ㄨ ㄨㄛ ㄨㄟ ㄨㄢ ㄨㄣ ㄨㄥ",
+        "ㄘ": "- ㄚ ㄜ ㄞ ㄠ ㄡ ㄢ ㄣ ㄤ ㄥ ㄨ ㄨㄛ ㄨㄟ ㄨㄢ ㄨㄣ ㄨㄥ",
+        "ㄙ": "- ㄚ ㄜ ㄞ ㄠ ㄡ ㄢ ㄣ ㄤ ㄥ ㄨ ㄨㄛ ㄨㄟ ㄨㄢ ㄨㄣ ㄨㄥ",
+    };
+    var VALID_ZHUYIN_BASES = new Set(Object.entries(ZHUYIN_FINALS_BY_INITIAL)
+        .flatMap(([initial, finals]) => finals.split(" ").map(final => initial + (final === "-" ? "" : final))));
+    var ZHUYIN_TONE_MARKS = new Map([["ˉ", 1], ["ˊ", 2], ["ˇ", 3], ["ˋ", 4], ["˙", 5]]);
+
+    function parseZhuyinSyllable(text) {
+        const match = text.match(/^(˙)?([ㄅ-ㄩ]+)([ˉˊˇˋ˙])?$/u);
+        if (!match || (match[1] && match[3]) || !VALID_ZHUYIN_BASES.has(match[2])) return null;
+        return ZHUYIN_TONE_MARKS.get(match[1] || match[3]) ?? 1;
+    }
+
+    function parseZhuyinReading(reading, expectedSyllableCount) {
+        if (!Number.isInteger(expectedSyllableCount) || expectedSyllableCount < 1) return null;
+        if (!/^[ㄅ-ㄩˉˊˇˋ˙\s\u0027\u02BC\u2018\u2019\-\u2010-\u2015]+$/u.test(reading)) return null;
+        const chunks = Array.from(reading.matchAll(/[^\s\u0027\u02BC\u2018\u2019\-\u2010-\u2015]+/gu));
+        if (!chunks.length || chunks.length > expectedSyllableCount) return null;
+        const memo = new Map();
+
+        // Retain at most two solutions: ambiguity must not silently pick a tone
+        // or move a neutral dot from one syllable to its neighbour.
+        function walk(chunkIndex, offset, remaining) {
+            if (chunkIndex === chunks.length) return remaining === 0 ? [[]] : [];
+            const chunk = chunks[chunkIndex][0];
+            if (offset === chunk.length) return walk(chunkIndex + 1, 0, remaining);
+            if (remaining < chunks.length - chunkIndex) return [];
+            const key = `${chunkIndex}:${offset}:${remaining}`;
+            if (memo.has(key)) return memo.get(key);
+            const solutions = [];
+            // A Mandarin syllable has at most three letters and one tone mark.
+            for (let end = offset + 1; end <= Math.min(chunk.length, offset + 4); end += 1) {
+                const text = chunk.slice(offset, end);
+                const tone = parseZhuyinSyllable(text);
+                if (tone === null) continue;
+                const start = chunks[chunkIndex].index + offset;
+                for (const tail of walk(chunkIndex, end, remaining - 1)) {
+                    solutions.push([{text, tone, start, end: chunks[chunkIndex].index + end}, ...tail]);
+                    if (solutions.length === 2) {
+                        memo.set(key, solutions);
+                        return solutions;
+                    }
+                }
+            }
+            memo.set(key, solutions);
+            return solutions;
+        }
+
+        const solutions = walk(0, 0, expectedSyllableCount);
+        return solutions.length === 1 ? solutions[0] : null;
+    }
+
+    function parseReading(reading, expectedSyllableCount) {
+        if (!Number.isInteger(expectedSyllableCount) || expectedSyllableCount < 1) return null;
+        return /\p{Script=Bopomofo}/u.test(reading)
+            ? parseZhuyinReading(reading, expectedSyllableCount)
+            : parsePinyinReading(reading, expectedSyllableCount);
     }
 
     function isHanCharacter(character) {
@@ -471,7 +582,7 @@
         const expressionHanCharacters = hanCharacters(expression);
         if (expressionHanCharacters.length === 0) return null;
 
-        const tones = parsePinyinTones(reading, expressionHanCharacters.length);
+        const tones = parseReading(reading, expressionHanCharacters.length)?.map(syllable => syllable.tone);
         if (!tones || expressionHanCharacters.length !== tones.length) return null;
         return tones;
     }
@@ -511,16 +622,55 @@
         return true;
     }
 
+    function applyReadingToneColors(element, syllables) {
+        if (element.dataset.toneColored === "true") return false;
+        const showText = document.defaultView?.NodeFilter?.SHOW_TEXT ?? 4;
+        const walker = document.createTreeWalker(element, showText);
+        const textNodes = [];
+        while (walker.nextNode()) textNodes.push(walker.currentNode);
+
+        let offset = 0;
+        let syllableIndex = 0;
+        for (const textNode of textNodes) {
+            const text = textNode.nodeValue;
+            const nodeEnd = offset + text.length;
+            const fragment = document.createDocumentFragment();
+            let position = offset;
+            while (position < nodeEnd) {
+                while (syllableIndex < syllables.length && syllables[syllableIndex].end <= position) syllableIndex += 1;
+                const syllable = syllables[syllableIndex];
+                const colored = syllable && position >= syllable.start;
+                const end = Math.min(nodeEnd, syllable ? (colored ? syllable.end : syllable.start) : nodeEnd);
+                const part = text.slice(position - offset, end - offset);
+                if (colored) {
+                    const span = document.createElement("span");
+                    span.className = `tone-${syllable.tone}`;
+                    span.textContent = part;
+                    fragment.appendChild(span);
+                } else {
+                    fragment.appendChild(document.createTextNode(part));
+                }
+                position = end;
+            }
+            textNode.parentNode.replaceChild(fragment, textNode);
+            offset = nodeEnd;
+        }
+        element.dataset.toneColored = "true";
+        return true;
+    }
+
     function applyToneColors() {
         const vocab = document.querySelector(".vocab");
         const reading = document.querySelector(".reading");
         if (!vocab || !reading) return false;
 
         const expressionHan = hanText(vocab.textContent);
-        const tones = toneSequenceForExpression(vocab.textContent, reading.textContent);
-        if (!tones) return false;
+        const syllables = parseReading(reading.textContent, hanCharacters(vocab.textContent).length);
+        if (!syllables) return false;
+        const tones = syllables.map(syllable => syllable.tone);
 
         let applied = applyToneSequence(vocab, tones);
+        applied = applyReadingToneColors(reading, syllables) || applied;
         for (const target of document.querySelectorAll(".sentence b, .sentence-alt b")) {
             if (hanText(target.textContent) !== expressionHan) continue;
             applied = applyToneSequence(target, tones) || applied;

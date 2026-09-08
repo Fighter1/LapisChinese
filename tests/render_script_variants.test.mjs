@@ -188,7 +188,7 @@ test("renders labeled variants, language-aware fonts, and graceful fallback", as
 
         const traditional = await renderCard(page, {
             expression: "中國",
-            reading: "zhōng guó",
+            reading: "ㄓㄨㄥㄍㄨㄛˊ",
             nightMode: true,
             mobile: true,
         });

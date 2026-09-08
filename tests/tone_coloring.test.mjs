@@ -13,10 +13,10 @@ assert.notEqual(start, -1, "tone-coloring start marker is missing");
 assert.notEqual(end, -1, "tone-coloring end marker is missing");
 
 const source = `${backTemplate.slice(start + startMarker.length, end)}
-globalThis.__toneApi = {parsePinyinTones, segmentCompactPinyin, toneSequenceForExpression};`;
+globalThis.__toneApi = {parsePinyinTones, segmentCompactPinyin, toneSequenceForExpression, parseReading};`;
 const context = vm.createContext({});
 new vm.Script(source, {filename: "tone-coloring.js"}).runInContext(context);
-const {parsePinyinTones, segmentCompactPinyin, toneSequenceForExpression} = context.__toneApi;
+const {parsePinyinTones, segmentCompactPinyin, toneSequenceForExpression, parseReading} = context.__toneApi;
 const plain = value => value === null ? null : Array.from(value);
 
 
@@ -89,4 +89,65 @@ test("fails closed for ambiguous or unsafe input", () => {
     assert.equal(toneSequenceForExpression("花儿", "huār"), null);
     assert.equal(toneSequenceForExpression("中国人", "zhōng guó"), null);
     assert.equal(toneSequenceForExpression("hello", "he2 llo5"), null);
+});
+
+test("colors the screenshot's spaced and compact Zhuyin readings", () => {
+    for (const reading of ["ㄕㄨㄟˇ ㄇㄨˇ ㄧㄚˋ ㄇㄣˊ", "ㄕㄨㄟˇㄇㄨˇㄧㄚˋㄇㄣˊ"]) {
+        assert.deepEqual(plain(toneSequenceForExpression("水母亞門", reading)), [3, 3, 4, 2]);
+    }
+});
+
+test("parses all Zhuyin tones and omitted first-tone marks", () => {
+    assert.deepEqual(plain(toneSequenceForExpression("媽麻馬罵嗎", "ㄇㄚˉ ㄇㄚˊ ㄇㄚˇ ㄇㄚˋ ˙ㄇㄚ")), [1, 2, 3, 4, 5]);
+    assert.deepEqual(plain(toneSequenceForExpression("天空", "ㄊㄧㄢㄎㄨㄥ")), [1, 1]);
+    assert.deepEqual(plain(toneSequenceForExpression("中國", "ㄓㄨㄥㄍㄨㄛˊ")), [1, 2]);
+    assert.deepEqual(plain(toneSequenceForExpression("知吃詩日字次四", "ㄓ ㄔ ㄕ ㄖˋ ㄗˋ ㄘˋ ㄙˋ")), [1, 1, 1, 4, 4, 4, 4]);
+    assert.deepEqual(plain(toneSequenceForExpression("女兒", "ㄋㄩˇ ㄦˊ")), [3, 2]);
+});
+
+test("accepts neutral dots only with unambiguous attachment", () => {
+    for (const reading of ["ㄇㄚ ˙ㄇㄚ", "ㄇㄚ ㄇㄚ˙", "ㄇㄚˉ˙ㄇㄚ", "ㄇㄚˉㄇㄚ˙"]) {
+        assert.deepEqual(plain(toneSequenceForExpression("媽媽", reading)), [1, 5], reading);
+    }
+    assert.deepEqual(plain(toneSequenceForExpression("朋友", "ㄆㄥˊ˙ㄧㄡ")), [2, 5]);
+    assert.deepEqual(plain(toneSequenceForExpression("嗎", "˙ㄇㄚ")), [5]);
+    assert.deepEqual(plain(toneSequenceForExpression("嗎", "ㄇㄚ˙")), [5]);
+    assert.equal(toneSequenceForExpression("媽媽", "ㄇㄚ˙ㄇㄚ"), null);
+});
+
+test("preserves source offsets and separators in both reading scripts", () => {
+    const cases = [
+        ["  ㄕㄨㄟˇ\u00a0ㄇㄨˇ—ㄧㄚˋ’ㄇㄣˊ  ", ["ㄕㄨㄟˇ", "ㄇㄨˇ", "ㄧㄚˋ", "ㄇㄣˊ"], [3, 3, 4, 2]],
+        ["  shuǐ\tmǔ-yà’mén  ", ["shuǐ", "mǔ", "yà", "mén"], [3, 3, 4, 2]],
+        ["nǚ'ér".normalize("NFD"), ["nǚ".normalize("NFD"), "ér".normalize("NFD")], [3, 2]],
+        ["huáfà".normalize("NFD"), ["huá".normalize("NFD"), "fà".normalize("NFD")], [2, 4]],
+        ["ni3hao3", ["ni3", "hao3"], [3, 3]],
+        ["lu:4 se4", ["lu:4", "se4"], [4, 4]],
+    ];
+    for (const [reading, texts, tones] of cases) {
+        const parsed = parseReading(reading, texts.length);
+        assert.ok(parsed, reading);
+        assert.deepEqual(Array.from(parsed, value => value.text), texts);
+        assert.deepEqual(Array.from(parsed, value => value.tone), tones);
+        let previousEnd = 0;
+        for (const value of parsed) {
+            assert.ok(value.start >= previousEnd);
+            assert.equal(reading.slice(value.start, value.end), value.text);
+            previousEnd = value.end;
+        }
+    }
+    assert.deepEqual(JSON.parse(JSON.stringify(parseReading(" nu\u0308\u030c e\u0301r ", 2))), [
+        {text: "nu\u0308\u030c", tone: 3, start: 1, end: 5},
+        {text: "e\u0301r", tone: 2, start: 6, end: 9},
+    ]);
+});
+
+test("rejects malformed, ambiguous, mixed, and unsupported Zhuyin readings", () => {
+    for (const reading of ["ㄅ", "ㄐㄚ", "ㄅㄩ", "ㄇㄇㄚ", "ㄚㄧ", "ㄇㄚˊˇ", "˙ㄇㄚ˙", "˙˙ㄇㄚ", "ㄇㄚ1", "ㄇㄚ5", "ㆠ", "ㄪ", "ㄇㄚ/ㄇㄚˊ", "ㄇㄚ，ㄇㄚˊ", "ˇ", ""]) {
+        assert.equal(parseReading(reading, 1), null, reading);
+    }
+    assert.equal(parseReading("ㄇㄚ mā", 2), null);
+    assert.equal(parseReading("ㄇㄚˊ", 2), null);
+    assert.equal(parseReading("ㄇㄚˊ ㄇㄚˊ", 1), null);
+    assert.equal(parseReading("ㄓㄨㄢ", 2), null); // ㄓ + ㄨㄢ or ㄓㄨ + ㄢ.
 });
