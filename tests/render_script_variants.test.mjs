@@ -221,6 +221,154 @@ test("renders labeled variants, language-aware fonts, and graceful fallback", as
 });
 
 
+async function renderCrossScriptCard(page, {loadOpenCC}) {
+    await page.setContent(`
+        <style>${css}</style>
+        <div class="card">
+            <div id="lapis" lang="zh-Hans">
+                <div class="vocab">举家</div>
+                <div class="script-variants" aria-label="Chinese character variants" hidden></div>
+                <div class="reading">jǔ jiā</div>
+                <div class="sentence">他<b>舉家</b>搬走了，<b class="unrelated">舉行</b>。</div>
+                <div class="sentence-alt">他<b>举家</b>搬走了。</div>
+            </div>
+        </div>
+    `);
+    if (loadOpenCC) {
+        await page.addScriptTag({path: openCCPath});
+    } else {
+        // setContent keeps the window, so drop the cached converter state too.
+        await page.evaluate(() => {
+            globalThis.OpenCC = undefined;
+            delete globalThis.__lapisChineseState;
+        });
+    }
+    return page.evaluate(source => {
+        const applied = eval(`${source.variants}\n${source.tones}\napplyToneColors();`);
+        const classes = selector => Array.from(document.querySelectorAll(`${selector} [class^='tone-']`))
+            .map(element => element.className);
+        return {
+            applied,
+            vocab: classes(".vocab"),
+            sentence: classes(".sentence b:not(.unrelated)"),
+            alternate: classes(".sentence-alt b"),
+            unrelated: classes(".unrelated").length,
+            variantToneSpans: classes(".script-variants").length,
+            sentenceText: document.querySelector(".sentence").textContent,
+        };
+    }, {variants: variantSource, tones: toneSource});
+}
+
+
+test("colors bold sentence vocabulary written in the other script", async () => {
+    const browser = await launchBrowser();
+    try {
+        const page = await browser.newPage();
+        const pageErrors = [];
+        page.on("pageerror", error => pageErrors.push(error.message));
+
+        const converted = await renderCrossScriptCard(page, {loadOpenCC: true});
+        assert.equal(converted.applied, true);
+        assert.deepEqual(converted.vocab, ["tone-3", "tone-1"]);
+        assert.deepEqual(converted.sentence, ["tone-3", "tone-1"]);
+        assert.deepEqual(converted.alternate, ["tone-3", "tone-1"]);
+        assert.equal(converted.unrelated, 0);
+        assert.equal(converted.variantToneSpans, 0);
+        assert.equal(converted.sentenceText, "他舉家搬走了，舉行。");
+
+        // Without OpenCC only the same-script bold word can be matched.
+        const unavailable = await renderCrossScriptCard(page, {loadOpenCC: false});
+        assert.equal(unavailable.applied, true);
+        assert.deepEqual(unavailable.vocab, ["tone-3", "tone-1"]);
+        assert.deepEqual(unavailable.sentence, []);
+        assert.deepEqual(unavailable.alternate, ["tone-3", "tone-1"]);
+        assert.deepEqual(pageErrors, []);
+    } finally {
+        await browser.close();
+    }
+});
+
+
+test("recolors the other-script bold word after OpenCC finishes loading", async () => {
+    const browser = await launchBrowser();
+    try {
+        const page = await browser.newPage();
+        const pageErrors = [];
+        page.on("pageerror", error => pageErrors.push(error.message));
+        let releaseScript;
+        const scriptReleased = new Promise(resolve => releaseScript = resolve);
+        await page.route("https://lapis.test/_lapis_opencc.js", async route => {
+            await scriptReleased;
+            await route.fulfill({
+                body: openCCSource,
+                contentType: "text/javascript; charset=utf-8",
+            });
+        });
+        await setPersistentPageContent(page);
+
+        const before = await page.evaluate(source => {
+            const qa = document.getElementById("qa");
+            qa.innerHTML = `
+                <div id="lapis" lang="zh-Hans">
+                    <div class="vocab">举家</div>
+                    <div class="script-variants" hidden></div>
+                    <div class="reading">jǔ jiā</div>
+                    <div class="sentence">他<b>舉家</b>搬走了。</div>
+                    <div class="sentence-alt">他<b>举家</b>搬走了。</div>
+                </div>`;
+            // Same order as the template's initialize(): variants start loading
+            // before the first tone pass runs without OpenCC.
+            const script = document.createElement("script");
+            script.textContent = `${source.variants}\n${source.tones}\n`
+                + "renderExpressionVariantsWhenReady(document.getElementById('lapis'));\n"
+                + "applyToneColors();";
+            qa.appendChild(script);
+            const classes = selector => Array.from(document.querySelectorAll(`${selector} [class^='tone-']`))
+                .map(element => element.className);
+            return {
+                vocab: classes(".vocab"),
+                sentence: classes(".sentence b"),
+                alternate: classes(".sentence-alt b"),
+                variants: document.querySelectorAll(".script-variant").length,
+            };
+        }, {variants: variantSource, tones: toneSource});
+        assert.deepEqual(before.vocab, ["tone-3", "tone-1"]);
+        assert.deepEqual(before.sentence, []);
+        assert.deepEqual(before.alternate, ["tone-3", "tone-1"]);
+        assert.equal(before.variants, 0);
+
+        releaseScript();
+        await page.waitForFunction(() => (
+            document.querySelector(".sentence b [class^='tone-']") !== null
+        ));
+        const after = await page.evaluate(() => {
+            const classes = selector => Array.from(document.querySelectorAll(`${selector} [class^='tone-']`))
+                .map(element => element.className);
+            return {
+                vocab: classes(".vocab"),
+                sentence: classes(".sentence b"),
+                alternate: classes(".sentence-alt b"),
+                variantTexts: Array.from(document.querySelectorAll(".script-variant-text"))
+                    .map(element => element.textContent),
+                variantToneSpans: classes(".script-variants").length,
+                nestedToneSpans: document.querySelectorAll("[class^='tone-'] [class^='tone-']").length,
+                sentenceText: document.querySelector(".sentence").textContent,
+            };
+        });
+        assert.deepEqual(after.vocab, ["tone-3", "tone-1"]);
+        assert.deepEqual(after.sentence, ["tone-3", "tone-1"]);
+        assert.deepEqual(after.alternate, ["tone-3", "tone-1"]);
+        assert.deepEqual(after.variantTexts, ["舉家"]);
+        assert.equal(after.variantToneSpans, 0);
+        assert.equal(after.nestedToneSpans, 0);
+        assert.equal(after.sentenceText, "他舉家搬走了。");
+        assert.deepEqual(pageErrors, []);
+    } finally {
+        await browser.close();
+    }
+});
+
+
 test("loads OpenCC and constructs converters once across persistent card renders", async () => {
     const browser = await launchBrowser();
     try {

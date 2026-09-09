@@ -328,14 +328,28 @@
     // the reading, so treat them as whitespace before validating the rest.
     var SEPARABLE_VERB_MARKERS = /(?:\/\/|[∥‖|｜∕⫽])+/gu;
 
+    // Dictionaries mark optional erhua with a parenthesized suffix, such as
+    // féi zào pào（～儿）, huā(~儿), or huā (~r). The suffix documents 儿化音
+    // rather than adding a syllable, so it is ignored like the markers above.
+    var ERHUA_MARKERS = /[（(]\s*[～~〜﹏]?\s*(?:儿|兒|r)\s*[）)]/gu;
+
+    // Replace every annotation with whitespace of the same UTF-16 length so
+    // syllable offsets computed on the result still index the original text.
+    function maskReadingAnnotations(reading) {
+        return reading
+            .replace(SEPARABLE_VERB_MARKERS, match => " ".repeat(match.length))
+            .replace(ERHUA_MARKERS, match => " ".repeat(match.length));
+    }
+
     // Dictionaries such as 现代汉语词典 prefix a neutral-tone syllable with a
     // middle dot (jù·zi). The dot is normalized to U+00B7 and kept attached to
     // the syllable it precedes so parsePinyinSyllable can read it as neutral.
     var NEUTRAL_TONE_DOT = "·";
     var NEUTRAL_TONE_DOTS = /\s*[·‧・]+\s*/gu;
+    var NEUTRAL_TONE_DOT_RUN = /^[·‧・]+\s*/u;
 
     function splitPinyinChunks(reading) {
-        const trimmed = reading.replace(SEPARABLE_VERB_MARKERS, " ").trim();
+        const trimmed = maskReadingAnnotations(reading).trim();
         if (!trimmed || /[\/;,，；、]/u.test(trimmed)) return null;
 
         const chunks = trimmed
@@ -477,20 +491,30 @@
             offset += separator?.[0].length ?? 0;
             const start = offset;
             const normalized = syllables[index].normalize("NFD");
-            let original = "";
-            while (offset < reading.length && original.normalize("NFD").length < normalized.length) {
+            // The field may write the neutral-tone dot as ·, ‧, or ・ and may
+            // separate it from its syllable with spaces (jù · zi). The chunk
+            // splitter collapsed that to one U+00B7, so match the run here.
+            let matched = "";
+            while (offset < reading.length && matched.normalize("NFD").length < normalized.length) {
+                const dotRun = reading.slice(offset).match(NEUTRAL_TONE_DOT_RUN);
+                if (dotRun) {
+                    matched += NEUTRAL_TONE_DOT;
+                    offset += dotRun[0].length;
+                    continue;
+                }
                 const character = String.fromCodePoint(reading.codePointAt(offset));
-                original += character;
+                matched += character;
                 offset += character.length;
             }
-            if (original.normalize("NFD") !== normalized) return null;
-            result.push({text: original, tone: tones[index], start, end: offset});
+            if (matched.normalize("NFD") !== normalized) return null;
+            result.push({text: reading.slice(start, offset), tone: tones[index], start, end: offset});
         }
         if (!/^[\s\u0027\u02BC\u2018\u2019\-\u2010-\u2015]*$/u.test(reading.slice(offset))) return null;
         return result;
     }
 
-    function parsePinyinReading(reading, expectedSyllableCount = null) {
+    function parsePinyinReading(rawReading, expectedSyllableCount = null) {
+        const reading = maskReadingAnnotations(rawReading);
         const directSyllables = splitPinyinSyllables(reading);
         const directTones = tonesForSyllables(directSyllables);
         if (directTones && (
@@ -544,8 +568,9 @@
         return ZHUYIN_TONE_MARKS.get(match[1] || match[3]) ?? 1;
     }
 
-    function parseZhuyinReading(reading, expectedSyllableCount) {
+    function parseZhuyinReading(rawReading, expectedSyllableCount) {
         if (!Number.isInteger(expectedSyllableCount) || expectedSyllableCount < 1) return null;
+        const reading = maskReadingAnnotations(rawReading);
         if (!/^[ㄅ-ㄩˉˊˇˋ˙\s\u0027\u02BC\u2018\u2019\-\u2010-\u2015]+$/u.test(reading)) return null;
         const chunks = Array.from(reading.matchAll(/[^\s\u0027\u02BC\u2018\u2019\-\u2010-\u2015]+/gu));
         if (!chunks.length || chunks.length > expectedSyllableCount) return null;
@@ -645,7 +670,11 @@
     // The sentence may bold the expression in the other script (for example a
     // traditional 舉家 for a simplified 举家 expression). Accept every script
     // form OpenCC can produce so those words still receive tone colors.
-    function expressionForms(expressionHan, openCC = availableOpenCC()) {
+    function availableOpenCCForTones() {
+        return typeof availableOpenCC === "function" ? availableOpenCC() : null;
+    }
+
+    function expressionForms(expressionHan, openCC = availableOpenCCForTones()) {
         const forms = new Set([expressionHan]);
         if (!openCC) return forms;
 
@@ -696,7 +725,7 @@
         return true;
     }
 
-    function applyToneColors(openCC = availableOpenCC()) {
+    function applyToneColors(openCC = availableOpenCCForTones()) {
         const vocab = document.querySelector(".vocab");
         const reading = document.querySelector(".reading");
         if (!vocab || !reading) return false;

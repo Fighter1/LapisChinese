@@ -258,6 +258,18 @@ test("colors pronunciation text across markup without changing characters, separ
                 spans: [["peng2", 2], ["you", 5], ["5", 5]],
             },
             {
+                expression: "句子",
+                html: "jù · zi",
+                tones: [4, 5],
+                spans: [["jù", 4], ["· zi", 5]],
+            },
+            {
+                expression: "东西",
+                html: "dōng‧<em>xi</em>",
+                tones: [1, 5],
+                spans: [["dōng", 1], ["‧", 5], ["xi", 5]],
+            },
+            {
                 expression: "媽媽",
                 html: "ㄇㄚ˙ㄇㄚ",
                 tones: [],

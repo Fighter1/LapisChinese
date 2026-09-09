@@ -74,10 +74,10 @@ python -m unittest discover -s tests -p "test_*.py"
 
 The suite covers diacritic and numbered Pinyin, spaced and compact Zhuyin,
 pronunciation coloring with preserved markup, neutral tones, umlaut spellings,
-mismatch and ambiguity handling, Simplified/Traditional
-conversion and persistent rendering, graceful converter failure, safe template
-data handling, Click-card listener cleanup, release ordering, stable Anki model
-metadata, and packaged OpenCC media.
+separable-verb and erhua annotations, mismatch and ambiguity handling,
+Simplified/Traditional conversion and persistent rendering, graceful converter
+failure, safe template data handling, Click-card listener cleanup, release
+ordering, stable Anki model metadata, and packaged OpenCC media.
 
 ## Customization
 
@@ -87,14 +87,18 @@ documented in [`docs/user_settings.md`](docs/user_settings.md).
 
 Tone coloring automatically recognizes Pinyin or Mandarin Zhuyin in
 `ExpressionReading`. It colors the vocabulary heading, pronunciation syllables
-(including tone marks or numbers), and matching bold vocabulary in the sentence.
-The smaller Simplified/Traditional variant rows keep their subdued styling.
-Spaced and uniquely segmentable compact readings are supported. An unmarked
-Zhuyin syllable is first tone; a neutral tone uses `˙` before the syllable, or after
-it when attachment is unambiguous. Use spaces if a dot could belong to either
-neighboring syllable, such as `ㄇㄚ ˙ㄇㄚ` for 媽媽. Invalid, ambiguous, mixed-script,
-or mismatched readings remain uncolored. Numeric Zhuyin tone notation and
-non-Mandarin Bopomofo extensions are not supported.
+(including tone marks or numbers), and bold vocabulary in the sentence that
+matches the expression in either Simplified or Traditional characters. The
+smaller Simplified/Traditional variant rows keep their subdued styling. Spaced
+and uniquely segmentable compact readings are supported. A Pinyin syllable
+preceded by a middle dot is neutral tone (`jù·zi`, `jù ‧ zi`) unless it carries
+its own tone mark or number. Separable-verb markers (`shēng ∥ huǒ`, `sheng1//huo3`) and
+erhua annotations (`pào（～儿）`, `huā (~r)`) are ignored in either script. An
+unmarked Zhuyin syllable is first tone; a neutral tone uses `˙` before the
+syllable, or after it when attachment is unambiguous. Use spaces if a dot could
+belong to either neighboring syllable, such as `ㄇㄚ ˙ㄇㄚ` for 媽媽. Invalid,
+ambiguous, mixed-script, or mismatched readings remain uncolored. Numeric Zhuyin
+tone notation and non-Mandarin Bopomofo extensions are not supported.
 
 ## License and attribution
 

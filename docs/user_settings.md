@@ -61,17 +61,27 @@ The ten `--light-mode-tone-*` and `--dark-mode-tone-*` variables control the fiv
 Mandarin tones. Changing them does not affect parsing or field data.
 
 The same palette colors the vocabulary heading, Pinyin or Zhuyin pronunciation
-syllables, and matching bold vocabulary in both sentence layouts. Pronunciation
-tone marks and Pinyin tone numbers take the syllable's color; separators retain
-their normal color. Character variant rows keep their existing subdued color.
+syllables, and matching bold vocabulary in both sentence layouts. A bold word is
+matched in either script, so a Traditional `<b>舉家</b>` in the sentence of a
+Simplified 举家 note is colored too; that cross-script match is applied once the
+OpenCC conversion data has loaded. Pronunciation tone marks and Pinyin tone
+numbers take the syllable's color; separators, middle dots, and ignored
+annotations retain their normal color. Character variant rows keep their
+existing subdued color.
 
 Pinyin and Mandarin Zhuyin are detected automatically from `ExpressionReading`;
-no setting or extra field is needed. Zhuyin accepts `ˉ ˊ ˇ ˋ ˙`, with an omitted
-mark meaning first tone. Neutral `˙` can precede a syllable or follow it when
-unambiguous. Separate syllables with spaces when necessary (for example,
-`ㄇㄚ ˙ㄇㄚ`). A reading must resolve uniquely to one syllable per Han character;
-otherwise coloring is skipped. Numeric Zhuyin tones and non-Mandarin Bopomofo
-extensions are unsupported.
+no setting or extra field is needed. In Pinyin, a middle dot (`·`, `‧`, or
+`・`) before a syllable marks it as neutral tone, as in `jù·zi`, `jù · zi`, or
+`dōng·xi`. The dot is colored with its syllable, and a tone mark or number on
+that syllable still takes precedence. Zhuyin accepts
+`ˉ ˊ ˇ ˋ ˙`, with an omitted mark meaning first tone. Neutral `˙` can precede a
+syllable or follow it when unambiguous. Separate syllables with spaces when
+necessary (for example, `ㄇㄚ ˙ㄇㄚ`). Separable-verb markers such as `∥`, `‖`,
+`|`, or `//` and parenthesized erhua annotations such as `（～儿）`, `(~兒)`, or
+`(~r)` are ignored in either script; the annotation never counts as a syllable.
+A reading must resolve uniquely to one syllable per Han character; otherwise
+coloring is skipped. Numeric Zhuyin tones and non-Mandarin Bopomofo extensions
+are unsupported.
 
 ## Character variants
 
