@@ -26,6 +26,47 @@ test("parses diacritic Pinyin", () => {
     assert.deepEqual(plain(parsePinyinTones("xī'ān")), [1, 1]);
 });
 
+test("parses dotted Pinyin using written tones and preserves source ranges", () => {
+    const cases = [
+        ["一定", "yị̄dìng", ["yị̄", "dìng"], [1, 4]],
+        ["一样", "yị̄yàng", ["yị̄", "yàng"], [1, 4]],
+        ["一共", "yị̄gòng", ["yị̄", "gòng"], [1, 4]],
+        ["不但", "bụ̀dàn", ["bụ̀", "dàn"], [4, 4]],
+        ["不像话", "bụ̀ xiànghuà", ["bụ̀", "xiàng", "huà"], [4, 4, 4]],
+        ["妈妈", "mạ̄ ma", ["mạ̄", "ma"], [1, 5]],
+    ];
+    for (const [expression, reading, texts, tones] of cases) {
+        for (const decompose of [false, true]) {
+            const normalize = text => decompose ? text.normalize("NFD") : text;
+            const input = `  ${normalize(reading)}  `;
+            const parsed = parseReading(input, tones.length);
+            assert.ok(parsed, input);
+            assert.deepEqual(plain(toneSequenceForExpression(expression, input)), tones, input);
+            assert.deepEqual(Array.from(parsed, value => value.tone), tones, input);
+            assert.deepEqual(Array.from(parsed, value => value.text), texts.map(normalize), input);
+            let previousEnd = 0;
+            for (const value of parsed) {
+                const expectedStart = input.indexOf(value.text, previousEnd);
+                assert.equal(value.start, expectedStart, input);
+                assert.equal(value.end, expectedStart + value.text.length, input);
+                assert.equal(input.slice(value.start, value.end), value.text, input);
+                previousEnd = value.end;
+            }
+        }
+    }
+});
+
+test("dot-below tolerance retains Pinyin validation", () => {
+    assert.equal(parsePinyinTones("yị"), null);
+    assert.deepEqual(plain(parsePinyinTones("mā yị")), [1, 5]);
+    assert.equal(parsePinyinTones("yị̄2"), null);
+    assert.equal(parsePinyinTones("bụ̀2"), null);
+    assert.equal(parsePinyinTones("yị̄\u0301"), null);
+    assert.equal(parsePinyinTones("yị̄\u0307"), null);
+    assert.equal(toneSequenceForExpression("一定啊", "yị̄ dìng"), null);
+    assert.equal(toneSequenceForExpression("西安", "xị̄ān"), null);
+});
+
 test("segments compact diacritic Pinyin from the expression length", () => {
     assert.deepEqual(plain(toneSequenceForExpression("华发", "huáfà")), [2, 4]);
     assert.deepEqual(plain(toneSequenceForExpression("中国", "zhōngguó")), [1, 2]);

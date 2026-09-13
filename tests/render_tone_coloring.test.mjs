@@ -258,6 +258,30 @@ test("colors pronunciation text across markup without changing characters, separ
                 spans: [["peng2", 2], ["you", 5], ["5", 5]],
             },
             {
+                expression: "一定",
+                html: "yị̄dìng",
+                tones: [1, 4],
+                spans: [["yị̄", 1], ["dìng", 4]],
+            },
+            {
+                expression: "不但",
+                html: "bụ̀dàn",
+                tones: [4, 4],
+                spans: [["bụ̀", 4], ["dàn", 4]],
+            },
+            {
+                expression: "一样",
+                html: "  <em>yi</em>\u0323\u0304ya\u0300ng  ",
+                tones: [1, 4],
+                spans: [["yi", 1], ["\u0323\u0304", 1], ["ya\u0300ng", 4]],
+            },
+            {
+                expression: "不像话",
+                html: "  <em>bu</em>\u0323\u0300&nbsp;xia\u0300nghua\u0300  ",
+                tones: [4, 4, 4],
+                spans: [["bu", 4], ["\u0323\u0300", 4], ["xia\u0300ng", 4], ["hua\u0300", 4]],
+            },
+            {
                 expression: "媽媽",
                 html: "ㄇㄚ˙ㄇㄚ",
                 tones: [],

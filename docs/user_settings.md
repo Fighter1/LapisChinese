@@ -65,6 +65,10 @@ syllables, and matching bold vocabulary in both sentence layouts. Pronunciation
 tone marks and Pinyin tone numbers take the syllable's color; separators retain
 their normal color. Character variant rows keep their existing subdued color.
 
+Pinyin dot-below annotations (`U+0323`), as in `yị̄dìng` and `bụ̀dàn`, are
+supported and preserved in the displayed reading. Colors follow the written
+tone marks (tone 1 for `yị̄`, tone 4 for `bụ̀`); no tone sandhi is calculated.
+
 Pinyin and Mandarin Zhuyin are detected automatically from `ExpressionReading`;
 no setting or extra field is needed. Zhuyin accepts `ˉ ˊ ˇ ˋ ˙`, with an omitted
 mark meaning first tone. Neutral `˙` can precede a syllable or follow it when

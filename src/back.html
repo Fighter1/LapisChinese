@@ -365,7 +365,8 @@
         if (numericTone !== null && markedTone !== null && numericTone !== markedTone) return null;
 
         const base = normalized
-            .replace(/[\u0300\u0301\u0304\u030C]/gu, "")
+            // Dot-below annotations do not change the written tone.
+            .replace(/[\u0300\u0301\u0304\u030C\u0323]/gu, "")
             .normalize("NFC")
             .replace(/ü/gu, "v");
         if (!/^[a-zv]+$/u.test(base)) return null;
