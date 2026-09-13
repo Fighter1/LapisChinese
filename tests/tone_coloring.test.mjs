@@ -26,7 +26,7 @@ test("parses diacritic Pinyin", () => {
     assert.deepEqual(plain(parsePinyinTones("xī'ān")), [1, 1]);
 });
 
-test("parses dotted Pinyin using written tones and preserves source ranges", () => {
+test("parses below-vowel Pinyin annotations using written tones and preserves source ranges", () => {
     const cases = [
         ["一定", "yị̄dìng", ["yị̄", "dìng"], [1, 4]],
         ["一样", "yị̄yàng", ["yị̄", "yàng"], [1, 4]],
@@ -34,10 +34,12 @@ test("parses dotted Pinyin using written tones and preserves source ranges", () 
         ["不但", "bụ̀dàn", ["bụ̀", "dàn"], [4, 4]],
         ["不像话", "bụ̀ xiànghuà", ["bụ̀", "xiàng", "huà"], [4, 4, 4]],
         ["妈妈", "mạ̄ ma", ["mạ̄", "ma"], [1, 5]],
+        ["一起", "yī̠qǐ", ["yī̠", "qǐ"], [1, 3]],
+        ["一起", "yī̠ qǐ", ["yī̠", "qǐ"], [1, 3]],
     ];
     for (const [expression, reading, texts, tones] of cases) {
-        for (const decompose of [false, true]) {
-            const normalize = text => decompose ? text.normalize("NFD") : text;
+        for (const form of [null, "NFC", "NFD"]) {
+            const normalize = text => form ? text.normalize(form) : text;
             const input = `  ${normalize(reading)}  `;
             const parsed = parseReading(input, tones.length);
             assert.ok(parsed, input);
@@ -54,6 +56,17 @@ test("parses dotted Pinyin using written tones and preserves source ranges", () 
             }
         }
     }
+});
+
+test("rejects detached leading combining marks in Pinyin", () => {
+    for (const mark of ["\u0320", "\u0323", "\u0304", "\u0308"]) {
+        assert.equal(parseReading(`${mark}yi`, 1), null);
+        assert.equal(parseReading(`yī ${mark}qǐ`, 2), null);
+        assert.equal(parseReading(`${mark}yi1`, 1), null);
+    }
+    assert.equal(parsePinyinTones("yi\u0320"), null);
+    assert.equal(parsePinyinTones("yī̠2"), null);
+    assert.equal(parsePinyinTones("yī\u0331"), null);
 });
 
 test("dot-below tolerance retains Pinyin validation", () => {

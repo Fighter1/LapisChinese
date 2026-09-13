@@ -282,6 +282,24 @@ test("colors pronunciation text across markup without changing characters, separ
                 spans: [["bu", 4], ["\u0323\u0300", 4], ["xia\u0300ng", 4], ["hua\u0300", 4]],
             },
             {
+                expression: "一起",
+                html: "yī̠qǐ",
+                tones: [1, 3],
+                spans: [["yī̠", 1], ["qǐ", 3]],
+            },
+            {
+                expression: "一起",
+                html: "  <em>yi</em>\u0320\u0304&nbsp;qi\u030c  ",
+                tones: [1, 3],
+                spans: [["yi", 1], ["\u0320\u0304", 1], ["qi\u030c", 3]],
+            },
+            {
+                expression: "一起",
+                html: "yī \u0320qǐ",
+                tones: [],
+                spans: [],
+            },
+            {
                 expression: "媽媽",
                 html: "ㄇㄚ˙ㄇㄚ",
                 tones: [],
