@@ -180,7 +180,7 @@ test("renders labeled variants, language-aware fonts, and graceful fallback", as
         assert.deepEqual(simplified.variants, ["中國"]);
         assert.deepEqual(simplified.variantLanguages, ["zh-Hant"]);
         assert.match(simplified.variantFont, /Noto Serif CJK TC/);
-        assert.equal(simplified.variantSize, "26px");
+        assert.equal(simplified.variantSize, "50px");
         assert.equal(simplified.variantColor, "rgba(0, 0, 0, 0.6)");
         assert.ok(Math.abs(simplified.variantOpticalOffsetRatio - 0.1) < 0.02);
         assert.equal(simplified.primaryToneSpans, 2);
@@ -199,7 +199,7 @@ test("renders labeled variants, language-aware fonts, and graceful fallback", as
         assert.deepEqual(traditional.variants, ["中国"]);
         assert.deepEqual(traditional.variantLanguages, ["zh-Hans"]);
         assert.match(traditional.primaryFont, /Noto Serif CJK TC/);
-        assert.equal(traditional.variantSize, "18px");
+        assert.equal(traditional.variantSize, "45px");
         assert.equal(traditional.variantColor, "rgba(255, 255, 255, 0.3)");
         assert.ok(Math.abs(traditional.variantOpticalOffsetRatio - 0.1) < 0.02);
         assert.equal(traditional.primaryToneSpans, 2);
