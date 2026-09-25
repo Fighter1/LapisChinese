@@ -86,7 +86,6 @@ test("fails closed for ambiguous or unsafe input", () => {
     assert.equal(parsePinyinTones("zhong guo"), null);
     assert.equal(parsePinyinTones("cháng / zhǎng"), null);
     assert.equal(parsePinyinTones("mā2"), null);
-    assert.equal(toneSequenceForExpression("花儿", "huār"), null);
     assert.equal(toneSequenceForExpression("中国人", "zhōng guó"), null);
     assert.equal(toneSequenceForExpression("hello", "he2 llo5"), null);
 });
@@ -165,6 +164,9 @@ test("reads a middle dot before a Pinyin syllable as neutral tone", () => {
     assert.deepEqual(plain(toneSequenceForExpression("东西", "dōng·xī")), [1, 1]);
     assert.deepEqual(plain(toneSequenceForExpression("东西", "dong1・xi1")), [1, 1]);
     assert.deepEqual(plain(toneSequenceForExpression("儿子", "ér‧zi")), [2, 5]);
+    assert.deepEqual(plain(toneSequenceForExpression("正儿八经", "zhèng •er bā jīng（口语中也读zhèng •er bā jǐng）（～的）")), [4, 5, 1, 1]);
+    assert.deepEqual(plain(toneSequenceForExpression("儿媳妇", "ér xí •fu（～儿）")), [2, 2, 5]);
+    assert.deepEqual(plain(toneSequenceForExpression("句子", "jù ∙ zi")), [4, 5]);
     assert.deepEqual(plain(toneSequenceForExpression("椅子", "yǐ·zi (~r)")), [3, 5]);
     assert.deepEqual(plain(toneSequenceForExpression("孩子们", "hái·zi·men")), [2, 5, 5]);
 
@@ -176,7 +178,7 @@ test("reads a middle dot before a Pinyin syllable as neutral tone", () => {
     assert.equal(toneSequenceForExpression("媽媽", "ㄇㄚ·ㄇㄚ"), null);
 });
 
-test("ignores erhua and separable-verb annotations in both reading scripts", () => {
+test("ignores parenthesized and separable-verb annotations in both reading scripts", () => {
     assert.deepEqual(plain(toneSequenceForExpression("肥皂泡", "féi zào pào（～儿）")), [2, 4, 4]);
     assert.deepEqual(plain(toneSequenceForExpression("肥皂泡", "féizàopào(~儿)")), [2, 4, 4]);
     assert.deepEqual(plain(toneSequenceForExpression("花", "huā (~r)")), [1]);
@@ -186,8 +188,16 @@ test("ignores erhua and separable-verb annotations in both reading scripts", () 
     assert.deepEqual(plain(toneSequenceForExpression("生火", "sheng1//huo3")), [1, 3]);
     assert.deepEqual(plain(toneSequenceForExpression("生火", "ㄕㄥ｜ㄏㄨㄛˇ")), [1, 3]);
 
+    // Regional variants and other notes in parentheses are not syllables either.
+    assert.deepEqual(plain(toneSequenceForExpression("削价", "xuē (Tw: xiāo) jià")), [1, 4]);
+    assert.deepEqual(plain(toneSequenceForExpression("削价", "xuē（台：xiāo）jià")), [1, 4]);
+    assert.deepEqual(plain(toneSequenceForExpression("削价", "xuējià (also xiāojià)")), [1, 4]);
+    assert.deepEqual(plain(toneSequenceForExpression("削價", "ㄒㄩㄝ (Tw: ㄒㄧㄠ) ㄐㄧㄚˋ")), [1, 4]);
+    assert.deepEqual(plain(toneSequenceForExpression("花", "huā（儿子）")), [1]);
+
     const cases = [
         ["féi zào pào（～儿）", ["féi", "zào", "pào"], [2, 4, 4]],
+        ["xuē (Tw: xiāo) jià", ["xuē", "jià"], [1, 4]],
         ["ㄏㄨㄚ（～儿）", ["ㄏㄨㄚ"], [1]],
         ["shēng ∥ huǒ", ["shēng", "huǒ"], [1, 3]],
         ["sheng1//huo3", ["sheng1", "huo3"], [1, 3]],
@@ -200,9 +210,108 @@ test("ignores erhua and separable-verb annotations in both reading scripts", () 
         for (const value of parsed) assert.equal(reading.slice(value.start, value.end), value.text);
     }
 
-    // The annotation never counts as a syllable, and unrelated parentheses stay unsupported.
+    // The annotation never counts as a syllable, and an unclosed parenthesis is still invalid.
     assert.equal(toneSequenceForExpression("肥皂泡儿", "féi zào pào（～儿）"), null);
-    assert.equal(toneSequenceForExpression("花", "huā（儿子）"), null);
+    assert.equal(toneSequenceForExpression("削价", "xuē (Tw: xiāo jià"), null);
+    assert.equal(toneSequenceForExpression("削价", "xuē Tw: xiāo) jià"), null);
+});
+
+test("treats pause punctuation in sayings as whitespace", () => {
+    assert.deepEqual(
+        plain(toneSequenceForExpression("若要人不知，除非己莫为", "ruò yào rén bù zhī，chú fēi jǐ mò wéi")),
+        [4, 4, 2, 4, 1, 2, 1, 3, 4, 2],
+    );
+    assert.deepEqual(
+        plain(toneSequenceForExpression("事不关己，高高挂起", "shì bù guān jǐ, gāo gāo guà qǐ")),
+        [4, 4, 1, 3, 1, 1, 4, 3],
+    );
+    assert.deepEqual(
+        plain(toneSequenceForExpression("惟其艰难，方显勇毅；惟其磨砺，始得玉成", "Wéiqí jiānnán, fāng xiǎn yǒngyì; wéiqí mólì, shǐ dé yùchéng")),
+        [2, 2, 1, 2, 1, 3, 3, 4, 2, 2, 2, 4, 3, 2, 4, 2],
+    );
+    assert.deepEqual(plain(toneSequenceForExpression("苦海无边，回头是岸", "kǔ hǎi wú biān ，huí tóu shì àn")), [3, 3, 2, 1, 2, 2, 4, 4]);
+    assert.deepEqual(plain(toneSequenceForExpression("一分钱一分货", "yī fēn qián, yī fēn huò")), [1, 1, 2, 1, 1, 4]);
+    assert.deepEqual(
+        plain(toneSequenceForExpression("又要马儿好，又要马儿不吃草", "yòu yào mǎr hǎo ， yòu yào mǎr bù chī cǎo")),
+        [4, 4, 3, 3, 3, 4, 4, 3, 3, 4, 1, 3],
+    );
+    assert.deepEqual(plain(toneSequenceForExpression("事不關己，高高掛起", "ㄕˋ ㄅㄨˋ ㄍㄨㄢ ㄐㄧˇ，ㄍㄠ ㄍㄠ ㄍㄨㄚˋ ㄑㄧˇ")), [4, 4, 1, 3, 1, 1, 4, 3]);
+    assert.deepEqual(
+        plain(toneSequenceForExpression("惊悉噩耗，不胜悲痛。逝者安息，请节哀顺变。", "Jīng xī è hào, bù shèng bēi tòng. Shì zhě ān xī, qǐng jié āi shùn biàn.")),
+        [1, 1, 4, 4, 4, 4, 1, 4, 4, 3, 1, 1, 3, 2, 1, 4, 4],
+    );
+    assert.deepEqual(plain(toneSequenceForExpression("美国：中国", "Měi guó：Zhōng guó")), [3, 2, 1, 2]);
+
+    // The punctuation is not part of any syllable range.
+    const parsed = parseReading("shì bù guān jǐ, gāo gāo guà qǐ", 8);
+    assert.deepEqual(Array.from(parsed, value => value.text), ["shì", "bù", "guān", "jǐ", "gāo", "gāo", "guà", "qǐ"]);
+    assert.equal(parsed[3].end, "shì bù guān jǐ".length);
+
+    // Alternative readings still fail: a slash is never a pause, and a
+    // comma-separated list has more syllables than the expression.
+    assert.equal(toneSequenceForExpression("长", "cháng / zhǎng"), null);
+    assert.equal(toneSequenceForExpression("长", "cháng, zhǎng"), null);
+    assert.equal(toneSequenceForExpression("关卡", "guān qiǎ, guān kǎ (Tw)"), null);
+    assert.equal(toneSequenceForExpression("长眼", "zhǎng yǎn/cháng yǎn"), null);
+    assert.equal(toneSequenceForExpression("圕", "tuān, tú shū guǎn"), null);
+});
+
+test("colors a following 儿 with the tone of its erhua syllable", () => {
+    assert.deepEqual(plain(toneSequenceForExpression("今儿个", "jīnr gè")), [1, 1, 4]);
+    assert.deepEqual(plain(toneSequenceForExpression("今兒個", "jīnr gè")), [1, 1, 4]);
+    assert.deepEqual(plain(toneSequenceForExpression("花儿", "huār")), [1, 1]);
+    assert.deepEqual(plain(toneSequenceForExpression("玩儿", "wanr2")), [2, 2]);
+    assert.deepEqual(plain(toneSequenceForExpression("一会儿", "yíhuìr")), [2, 4, 4]);
+    assert.deepEqual(plain(toneSequenceForExpression("一会儿", "yí huìr")), [2, 4, 4]);
+    assert.deepEqual(plain(toneSequenceForExpression("小孩儿", "xiǎo háir")), [3, 2, 2]);
+
+    // Spellings that write the erhua sound change instead of appending r to
+    // the full syllable: dropped -n or -i, i/ü plus e, and ui/un as uer.
+    assert.deepEqual(plain(toneSequenceForExpression("片儿", "piàr")), [4, 4]);
+    assert.deepEqual(plain(toneSequenceForExpression("喝断片儿", "hē duàn piàr")), [1, 4, 4, 4]);
+    assert.deepEqual(plain(toneSequenceForExpression("片儿汤话", "piàr tāng huà")), [4, 4, 1, 4]);
+    assert.deepEqual(plain(toneSequenceForExpression("味儿", "wèr")), [4, 4]);
+    assert.deepEqual(plain(toneSequenceForExpression("玩儿", "wár")), [2, 2]);
+    assert.deepEqual(plain(toneSequenceForExpression("今儿", "jiēr")), [1, 1]);
+    assert.deepEqual(plain(toneSequenceForExpression("鱼儿", "yúer")), [2, 2]);
+    assert.deepEqual(plain(toneSequenceForExpression("追儿", "zhuēr")), [1, 1]);
+    assert.deepEqual(plain(toneSequenceForExpression("滚儿", "gǔer")), [3, 3]);
+    assert.deepEqual(plain(toneSequenceForExpression("一会儿", "yíhuèr")), [2, 4, 4]);
+    assert.equal(toneSequenceForExpression("儿", "xr"), null);
+    assert.equal(toneSequenceForExpression("片", "pia"), null);
+
+    // CC-CEDICT style detached r: its own range in the reading, and it takes
+    // the previous syllable's tone rather than absorbing a character.
+    assert.deepEqual(plain(toneSequenceForExpression("颠儿", "diān r")), [1, 1]);
+    assert.deepEqual(plain(toneSequenceForExpression("颠儿", "dian1 r5")), [1, 1]);
+    assert.deepEqual(plain(toneSequenceForExpression("玩儿", "wan2r")), [2, 2]);
+    assert.deepEqual(plain(toneSequenceForExpression("一会儿", "yi2 hui4 r5")), [2, 4, 4]);
+    assert.deepEqual(plain(toneSequenceForExpression("哪儿跟哪儿", "nǎr gēn nǎr")), [3, 3, 1, 3, 3]);
+    const detached = parseReading("dian1 r5", 2);
+    assert.deepEqual(Array.from(detached, value => value.text), ["dian1", "r5"]);
+    assert.deepEqual(Array.from(detached, value => value.tone), [1, 1]);
+    assert.equal(toneSequenceForExpression("儿", "r"), null);
+    assert.equal(toneSequenceForExpression("儿颠", "r diān"), null);
+    assert.equal(toneSequenceForExpression("颠儿", "diān r2"), null);
+
+    // A separately read 儿 is still its own syllable, and 儿 never absorbs
+    // when the syllable count already matches.
+    assert.deepEqual(plain(toneSequenceForExpression("今儿个", "jīn ér gè")), [1, 2, 4]);
+    assert.deepEqual(plain(toneSequenceForExpression("女儿", "nǚ ér")), [3, 2]);
+    assert.deepEqual(plain(toneSequenceForExpression("儿子", "ér zi")), [2, 5]);
+    assert.deepEqual(plain(toneSequenceForExpression("花", "huār")), [1]);
+
+    // Only 儿/兒 can be absorbed, only after an erhua syllable, and the
+    // reading still has to account for every other character.
+    assert.equal(toneSequenceForExpression("花朵", "huār"), null);
+    assert.equal(toneSequenceForExpression("儿花", "huār"), null);
+    assert.equal(toneSequenceForExpression("今儿个", "jīn gè"), null);
+    assert.equal(toneSequenceForExpression("今儿个儿", "jīnr gè"), null);
+
+    // The reading's own syllable ranges are unchanged: jīnr is one syllable.
+    const parsed = parseReading("jīnr gè", 2);
+    assert.deepEqual(Array.from(parsed, value => value.text), ["jīnr", "gè"]);
+    assert.deepEqual(Array.from(parsed, value => value.tone), [1, 4]);
 });
 
 test("rejects malformed, ambiguous, mixed, and unsupported Zhuyin readings", () => {

@@ -328,29 +328,39 @@
     // the reading, so treat them as whitespace before validating the rest.
     var SEPARABLE_VERB_MARKERS = /(?:\/\/|[∥‖|｜∕⫽])+/gu;
 
-    // Dictionaries mark optional erhua with a parenthesized suffix, such as
-    // féi zào pào（～儿）, huā(~儿), or huā (~r). The suffix documents 儿化音
-    // rather than adding a syllable, so it is ignored like the markers above.
-    var ERHUA_MARKERS = /[（(]\s*[～~〜﹏]?\s*(?:儿|兒|r)\s*[）)]/gu;
+    // Dictionaries put side notes in parentheses: optional erhua such as
+    // féi zào pào（～儿）or huā (~r), and regional variants such as
+    // xuē (Tw: xiāo) jià. None of it is part of the reading, so every
+    // parenthesized span is ignored like the markers above.
+    var PARENTHESIZED_ANNOTATIONS = /[（(][^（）()]*[）)]/gu;
+
+    // Sayings and idioms carry pause punctuation in both the expression and
+    // the reading (若要人不知，除非己莫为 / ruò yào rén bù zhī，chú fēi jǐ mò
+    // wéi). A comma is treated as whitespace; a reading that instead lists
+    // alternatives (guān qiǎ, guān kǎ) still fails because its syllable count
+    // does not match the expression. A slash always means alternatives.
+    var PAUSE_PUNCTUATION = /[,，、;；.。！？!?…：]/gu;
 
     // Replace every annotation with whitespace of the same UTF-16 length so
     // syllable offsets computed on the result still index the original text.
     function maskReadingAnnotations(reading) {
         return reading
             .replace(SEPARABLE_VERB_MARKERS, match => " ".repeat(match.length))
-            .replace(ERHUA_MARKERS, match => " ".repeat(match.length));
+            .replace(PARENTHESIZED_ANNOTATIONS, match => " ".repeat(match.length))
+            .replace(PAUSE_PUNCTUATION, match => " ".repeat(match.length));
     }
 
     // Dictionaries such as 现代汉语词典 prefix a neutral-tone syllable with a
-    // middle dot (jù·zi). The dot is normalized to U+00B7 and kept attached to
-    // the syllable it precedes so parsePinyinSyllable can read it as neutral.
+    // middle dot (jù·zi); some sources use a bullet instead (zhèng •er).
+    // The dot is normalized to U+00B7 and kept attached to the syllable it
+    // precedes so parsePinyinSyllable can read it as neutral.
     var NEUTRAL_TONE_DOT = "·";
-    var NEUTRAL_TONE_DOTS = /\s*[·‧・]+\s*/gu;
-    var NEUTRAL_TONE_DOT_RUN = /^[·‧・]+\s*/u;
+    var NEUTRAL_TONE_DOTS = /\s*[·‧・•∙]+\s*/gu;
+    var NEUTRAL_TONE_DOT_RUN = /^[·‧・•∙]+\s*/u;
 
     function splitPinyinChunks(reading) {
         const trimmed = maskReadingAnnotations(reading).trim();
-        if (!trimmed || /[\/;,，；、]/u.test(trimmed)) return null;
+        if (!trimmed || /\//u.test(trimmed)) return null;
 
         const chunks = trimmed
             .replace(/[\u0027\u02BC\u2018\u2019\-\u2010-\u2015]+/gu, " ")
@@ -408,20 +418,52 @@
         return {tone, explicit: tone !== null, base};
     }
 
+    // Erhua is usually written by appending r to the full syllable (piànr),
+    // but some sources spell the sound change instead: a final -n or -i is
+    // dropped (piàr, wèr, wár), a bare i or ü gains e (jiēr, yúer), and the
+    // finals ui and un surface as uer (zhuēr, gǔer). Recover the standard
+    // syllable from the written stem so those spellings validate too.
+    function erhuaStemCandidates(stem) {
+        const candidates = [stem, `${stem}n`];
+        if (/[ae]$/u.test(stem)) candidates.push(`${stem}i`);
+        if (stem.endsWith("ue")) candidates.push(`${stem.slice(0, -2)}ui`, `${stem.slice(0, -2)}un`);
+        return candidates;
+    }
+
+    function isErhuaBase(base) {
+        if (base === "r" || base === "er" || !base.endsWith("r")) return false;
+        return erhuaStemCandidates(base.slice(0, -1)).some(candidate => VALID_PINYIN_BASES.has(candidate));
+    }
+
     function isValidPinyinBase(base) {
-        if (VALID_PINYIN_BASES.has(base)) return true;
-        return base.endsWith("r") && base !== "er" && VALID_PINYIN_BASES.has(base.slice(0, -1));
+        return VALID_PINYIN_BASES.has(base) || isErhuaBase(base);
+    }
+
+    // CC-CEDICT writes erhua as a separate r syllable (dian1 r5, diān r).
+    // It is not a syllable of its own: it belongs to the syllable before it
+    // and takes that syllable's tone.
+    function isDetachedErhua(parsed, index) {
+        const value = parsed[index];
+        const previous = parsed[index - 1];
+        return value.base === "r"
+            && index > 0
+            && (value.tone === null || value.tone === 5)
+            && previous.base !== "r"
+            && isValidPinyinBase(previous.base);
     }
 
     function tonesForSyllables(syllables) {
         if (!syllables) return null;
 
         const parsed = syllables.map(parsePinyinSyllable);
-        if (parsed.some(value => value === null || !isValidPinyinBase(value.base))) return null;
-        if (!parsed.some(value => value.explicit)) return null;
+        if (parsed.some(value => value === null)) return null;
+        const detachedErhua = parsed.map((value, index) => isDetachedErhua(parsed, index));
+        if (parsed.some((value, index) => !detachedErhua[index] && !isValidPinyinBase(value.base))) return null;
+        if (!parsed.some((value, index) => value.explicit && !detachedErhua[index])) return null;
 
         // In otherwise tone-marked Pinyin, an unmarked syllable is neutral.
-        return parsed.map(value => value.tone ?? 5);
+        const tones = parsed.map(value => value.tone ?? 5);
+        return tones.map((tone, index) => detachedErhua[index] ? tones[index - 1] : tone);
     }
 
     function segmentCompactPinyin(reading, expectedSyllableCount) {
@@ -465,10 +507,12 @@
                 // with a, o, or e require an explicit separator. Chunk starts
                 // already represent whitespace, apostrophes, or hyphens.
                 if (characterIndex > 0 && parsed && /^[aoe]/u.test(parsed.base)) continue;
-                // An -r suffix is valid only when the whole reading is already
-                // one syllable. Treating it as a compact boundary could turn
-                // huār into the incorrect two-syllable split hu + ār.
-                if (!parsed || !VALID_PINYIN_BASES.has(parsed.base)) continue;
+                // An erhua -r suffix is accepted only at the end of a chunk
+                // (yíhuìr). Allowing it mid-chunk could turn huār into the
+                // incorrect two-syllable split hu + ār.
+                if (!parsed) continue;
+                if (!VALID_PINYIN_BASES.has(parsed.base)
+                    && !(end === characters.length && isValidPinyinBase(parsed.base))) continue;
 
                 syllables.push(candidate);
                 walk(chunkIndex, end, syllablesRemaining - 1);
@@ -623,13 +667,58 @@
         return Array.from(value).filter(isHanCharacter);
     }
 
-    function toneSequenceForExpression(expression, reading) {
-        const expressionHanCharacters = hanCharacters(expression);
-        if (expressionHanCharacters.length === 0) return null;
+    // Erhua written into the syllable (jīnr, huār, yíhuìr) covers two
+    // characters: the syllable's own and the 儿/兒 that follows it. The
+    // suffix character takes the syllable's tone, as Pleco colors it.
+    var ERHUA_CHARACTERS = new Set(["儿", "兒"]);
 
-        const tones = parseReading(reading, expressionHanCharacters.length)?.map(syllable => syllable.tone);
-        if (!tones || expressionHanCharacters.length !== tones.length) return null;
-        return tones;
+    function isErhuaSyllable(text) {
+        const parsed = parsePinyinSyllable(text);
+        return Boolean(parsed) && isErhuaBase(parsed.base);
+    }
+
+    // Map syllables onto expression characters one to one, letting an erhua
+    // syllable also claim a following 儿/兒 when there are more characters
+    // than syllables left. Returns one tone per character, or null.
+    function alignSyllablesToCharacters(syllables, characters) {
+        const tones = [];
+        let index = 0;
+        for (let position = 0; position < syllables.length; position += 1) {
+            if (index >= characters.length) return null;
+            const syllable = syllables[position];
+            tones.push(syllable.tone);
+            index += 1;
+
+            const charactersLeft = characters.length - index;
+            const syllablesLeft = syllables.length - position - 1;
+            if (charactersLeft > syllablesLeft
+                && ERHUA_CHARACTERS.has(characters[index])
+                && isErhuaSyllable(syllable.text)) {
+                tones.push(syllable.tone);
+                index += 1;
+            }
+        }
+        return index === characters.length ? tones : null;
+    }
+
+    // Parse the reading against the expression's characters. The exact
+    // one-syllable-per-character reading is tried first; if it fails, each
+    // 儿/兒 that follows another character may instead be absorbed by an
+    // erhua syllable, so a reading with fewer syllables can still align.
+    function parseReadingForCharacters(reading, characters) {
+        if (characters.length === 0) return null;
+        const absorbable = characters.filter((character, index) => index > 0 && ERHUA_CHARACTERS.has(character)).length;
+        for (let absorbed = 0; absorbed <= absorbable; absorbed += 1) {
+            const syllables = parseReading(reading, characters.length - absorbed);
+            if (!syllables) continue;
+            const tones = alignSyllablesToCharacters(syllables, characters);
+            if (tones) return {syllables, tones};
+        }
+        return null;
+    }
+
+    function toneSequenceForExpression(expression, reading) {
+        return parseReadingForCharacters(reading, hanCharacters(expression))?.tones ?? null;
     }
 
     function hanText(value) {
@@ -668,24 +757,39 @@
     }
 
     // The sentence may bold the expression in the other script (for example a
-    // traditional 舉家 for a simplified 举家 expression). Accept every script
-    // form OpenCC can produce so those words still receive tone colors.
+    // traditional 舉家 for a simplified 举家 expression). OpenCC's phrase
+    // dictionary can also pick a different variant than the sentence source
+    // (南迴歸線 where the sentence has 南回歸線, 鍊金術 for 煉金術), so instead
+    // of requiring the bold word to equal a generated form, both sides are
+    // normalized to each script and compared: 迴 and 回 collapse to the same
+    // Simplified text. Without OpenCC only an identical word matches.
     function availableOpenCCForTones() {
         return typeof availableOpenCC === "function" ? availableOpenCC() : null;
     }
 
-    function expressionForms(expressionHan, openCC = availableOpenCCForTones()) {
-        const forms = new Set([expressionHan]);
-        if (!openCC) return forms;
+    function expressionMatcher(expressionHan, openCC = availableOpenCCForTones()) {
+        const identical = han => han === expressionHan;
+        if (!openCC) return identical;
 
+        let converters;
         try {
-            const {toTraditional, toSimplified} = expressionVariantConverters(openCC);
-            forms.add(hanText(toTraditional(expressionHan)));
-            forms.add(hanText(toSimplified(expressionHan)));
+            converters = expressionVariantConverters(openCC);
         } catch (error) {
             console.warn("Lapis Chinese could not convert the expression for tone matching.", error);
+            return identical;
         }
-        return forms;
+
+        const normalize = han => {
+            try {
+                return [hanText(converters.toSimplified(han)), hanText(converters.toTraditional(han))];
+            } catch (error) {
+                console.warn("Lapis Chinese could not convert a sentence word for tone matching.", error);
+                return [];
+            }
+        };
+        const expressionScripts = normalize(expressionHan);
+        return han => identical(han)
+            || normalize(han).some((form, script) => form === expressionScripts[script]);
     }
 
     function applyReadingToneColors(element, syllables) {
@@ -731,15 +835,15 @@
         if (!vocab || !reading) return false;
 
         const expressionHan = hanText(vocab.textContent);
-        const syllables = parseReading(reading.textContent, hanCharacters(vocab.textContent).length);
-        if (!syllables) return false;
-        const tones = syllables.map(syllable => syllable.tone);
+        const parsed = parseReadingForCharacters(reading.textContent, hanCharacters(vocab.textContent));
+        if (!parsed) return false;
+        const {syllables, tones} = parsed;
 
-        const forms = expressionForms(expressionHan, openCC);
+        const matchesExpression = expressionMatcher(expressionHan, openCC);
         let applied = applyToneSequence(vocab, tones);
         applied = applyReadingToneColors(reading, syllables) || applied;
         for (const target of document.querySelectorAll(".sentence b, .sentence-alt b")) {
-            if (!forms.has(hanText(target.textContent))) continue;
+            if (!matchesExpression(hanText(target.textContent))) continue;
             applied = applyToneSequence(target, tones) || applied;
         }
         return applied;

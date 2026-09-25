@@ -221,16 +221,22 @@ test("renders labeled variants, language-aware fonts, and graceful fallback", as
 });
 
 
-async function renderCrossScriptCard(page, {loadOpenCC}) {
+async function renderCrossScriptCard(page, {
+    loadOpenCC,
+    vocab = "举家",
+    reading = "jǔ jiā",
+    sentence = "他<b>舉家</b>搬走了，<b class=\"unrelated\">舉行</b>。",
+    sentenceAlt = "他<b>举家</b>搬走了。",
+}) {
     await page.setContent(`
         <style>${css}</style>
         <div class="card">
             <div id="lapis" lang="zh-Hans">
-                <div class="vocab">举家</div>
+                <div class="vocab">${vocab}</div>
                 <div class="script-variants" aria-label="Chinese character variants" hidden></div>
-                <div class="reading">jǔ jiā</div>
-                <div class="sentence">他<b>舉家</b>搬走了，<b class="unrelated">舉行</b>。</div>
-                <div class="sentence-alt">他<b>举家</b>搬走了。</div>
+                <div class="reading">${reading}</div>
+                <div class="sentence">${sentence}</div>
+                <div class="sentence-alt">${sentenceAlt}</div>
             </div>
         </div>
     `);
@@ -282,6 +288,69 @@ test("colors bold sentence vocabulary written in the other script", async () => 
         assert.deepEqual(unavailable.vocab, ["tone-3", "tone-1"]);
         assert.deepEqual(unavailable.sentence, []);
         assert.deepEqual(unavailable.alternate, ["tone-3", "tone-1"]);
+        assert.deepEqual(pageErrors, []);
+    } finally {
+        await browser.close();
+    }
+});
+
+
+test("colors a bold word whose Traditional variant differs from OpenCC's choice", async () => {
+    // OpenCC converts 炼金术 to 鍊金術 and 南回归线 to 南迴歸線, but sentence
+    // sources commonly write 煉金術 and 南回歸線. Both spellings simplify back
+    // to the expression, so they must still be matched.
+    const browser = await launchBrowser();
+    try {
+        const page = await browser.newPage();
+        const pageErrors = [];
+        page.on("pageerror", error => pageErrors.push(error.message));
+
+        const alchemy = await renderCrossScriptCard(page, {
+            loadOpenCC: true,
+            vocab: "炼金术",
+            reading: "liàn jīn shù",
+            sentence: "中國媒體已掌握「<b>煉金術</b>」，將「<b class=\"unrelated\">危機</b>」形容成「機遇」，",
+            sentenceAlt: "中国媒体已掌握「<b>炼金术</b>」。",
+        });
+        assert.equal(alchemy.applied, true);
+        assert.deepEqual(alchemy.vocab, ["tone-4", "tone-1", "tone-4"]);
+        assert.deepEqual(alchemy.sentence, ["tone-4", "tone-1", "tone-4"]);
+        assert.deepEqual(alchemy.alternate, ["tone-4", "tone-1", "tone-4"]);
+        assert.equal(alchemy.unrelated, 0);
+        assert.equal(alchemy.sentenceText, "中國媒體已掌握「煉金術」，將「危機」形容成「機遇」，");
+
+        const tropic = await renderCrossScriptCard(page, {
+            loadOpenCC: true,
+            vocab: "南回归线",
+            reading: "nán huí guī xiàn",
+            sentence: "地球上<b>南回歸線</b>的緯度是多少？",
+            sentenceAlt: "地球上<b>南迴歸線</b>的緯度是多少？",
+        });
+        assert.deepEqual(tropic.sentence, ["tone-2", "tone-2", "tone-1", "tone-4"]);
+        assert.deepEqual(tropic.alternate, ["tone-2", "tone-2", "tone-1", "tone-4"]);
+
+        // A genuinely different character is still not the expression.
+        const recoil = await renderCrossScriptCard(page, {
+            loadOpenCC: true,
+            vocab: "后座力",
+            reading: "hòu zuò lì",
+            sentence: "<b>后坐力</b>很大。",
+            sentenceAlt: "<b>後座力</b>很大。",
+        });
+        assert.deepEqual(recoil.vocab, ["tone-4", "tone-4", "tone-4"]);
+        assert.deepEqual(recoil.sentence, []);
+        assert.deepEqual(recoil.alternate, ["tone-4", "tone-4", "tone-4"]);
+
+        // Without OpenCC the differently spelled word cannot be matched.
+        const unavailable = await renderCrossScriptCard(page, {
+            loadOpenCC: false,
+            vocab: "炼金术",
+            reading: "liàn jīn shù",
+            sentence: "「<b>煉金術</b>」",
+            sentenceAlt: "「<b>炼金术</b>」",
+        });
+        assert.deepEqual(unavailable.sentence, []);
+        assert.deepEqual(unavailable.alternate, ["tone-4", "tone-1", "tone-4"]);
         assert.deepEqual(pageErrors, []);
     } finally {
         await browser.close();
