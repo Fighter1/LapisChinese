@@ -400,6 +400,8 @@
             .toLowerCase()
             .replace(/u:/gu, "ü")
             .normalize("NFD");
+        // Combining marks belong to the preceding letter, never the next syllable.
+        if (/^\p{Mark}/u.test(normalized)) return null;
         const markedTones = Array.from(normalized)
             .map(character => PINYIN_TONE_MARKS.get(character))
             .filter(tone => tone !== undefined);
@@ -409,7 +411,8 @@
         if (numericTone !== null && markedTone !== null && numericTone !== markedTone) return null;
 
         const base = normalized
-            .replace(/[\u0300\u0301\u0304\u030C]/gu, "")
+            // Minus-sign-below and dot-below annotations do not change the written tone.
+            .replace(/[\u0300\u0301\u0304\u030C\u0320\u0323]/gu, "")
             .normalize("NFC")
             .replace(/ü/gu, "v");
         if (!/^[a-zv]+$/u.test(base)) return null;

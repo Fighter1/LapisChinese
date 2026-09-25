@@ -270,6 +270,48 @@ test("colors pronunciation text across markup without changing characters, separ
                 spans: [["dōng", 1], ["‧", 5], ["xi", 5]],
             },
             {
+                expression: "一定",
+                html: "yị̄dìng",
+                tones: [1, 4],
+                spans: [["yị̄", 1], ["dìng", 4]],
+            },
+            {
+                expression: "不但",
+                html: "bụ̀dàn",
+                tones: [4, 4],
+                spans: [["bụ̀", 4], ["dàn", 4]],
+            },
+            {
+                expression: "一样",
+                html: "  <em>yi</em>\u0323\u0304ya\u0300ng  ",
+                tones: [1, 4],
+                spans: [["yi", 1], ["\u0323\u0304", 1], ["ya\u0300ng", 4]],
+            },
+            {
+                expression: "不像话",
+                html: "  <em>bu</em>\u0323\u0300&nbsp;xia\u0300nghua\u0300  ",
+                tones: [4, 4, 4],
+                spans: [["bu", 4], ["\u0323\u0300", 4], ["xia\u0300ng", 4], ["hua\u0300", 4]],
+            },
+            {
+                expression: "一起",
+                html: "yī̠qǐ",
+                tones: [1, 3],
+                spans: [["yī̠", 1], ["qǐ", 3]],
+            },
+            {
+                expression: "一起",
+                html: "  <em>yi</em>\u0320\u0304&nbsp;qi\u030c  ",
+                tones: [1, 3],
+                spans: [["yi", 1], ["\u0320\u0304", 1], ["qi\u030c", 3]],
+            },
+            {
+                expression: "一起",
+                html: "yī \u0320qǐ",
+                tones: [],
+                spans: [],
+            },
+            {
                 expression: "媽媽",
                 html: "ㄇㄚ˙ㄇㄚ",
                 tones: [],

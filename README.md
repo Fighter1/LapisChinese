@@ -129,6 +129,8 @@ The smaller Simplified/Traditional variant rows keep their subdued styling.
 
 - Spaced Pinyin with tone marks or numbers (`zhōng guó`, `zhong1 guo2`), and
   compact Pinyin when it segments uniquely (`zhōngguó`).
+- Dot-below and minus-sign-below annotations on a vowel (`yị̄dìng`, `yī̠qǐ`) are
+  preserved and colored by the written tone mark; no tone sandhi is applied.
 - A middle dot or bullet before a syllable marks neutral tone (`jù·zi`,
   `jù ‧ zi`, `zhèng •er`) unless the syllable carries its own tone mark or
   number.

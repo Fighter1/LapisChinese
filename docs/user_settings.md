@@ -81,6 +81,13 @@ loaded; before that, only an identical bold word is colored.
 Pinyin and Mandarin Zhuyin are detected automatically from `ExpressionReading`;
 no setting or extra field is needed.
 
+- **Below-letter annotations.** Pinyin dot-below annotations (`U+0323`), as in
+  `yị̄dìng` and `bụ̀dàn`, and minus-sign-below annotations (`U+0320`), as in
+  `yī̠qǐ`, are accepted and preserved in the displayed reading. Colors follow
+  the written tone marks (tone 1 for `yị̄` and `yī̠`, tone 4 for `bụ̀`); no tone
+  sandhi is calculated. Combining marks must stay attached to the preceding
+  letter, not begin a syllable.
+
 - **Neutral tone.** In Pinyin, a middle dot or bullet (`·`, `‧`, `・`, `•`, or
   `∙`) before a syllable marks it as neutral tone, as in `jù·zi`, `jù · zi`,
   `dōng·xi`, or `zhèng •er`. The dot is colored with its syllable, and a tone
